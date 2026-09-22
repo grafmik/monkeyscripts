@@ -1,118 +1,118 @@
 // ==UserScript==
 // @name        Uber Eats : masquer les plats en double
 // @namespace   Violentmonkey Scripts
-// @version     1.0.0
+// @version     2.0.0
 //
-// @match       https://www.ubereats.com/*
+// @match       https://www.ubereats.com/*/store/*
 // @grant       none
 //
 // @author      Mik
-// @description Masque les plats déjà affichés plus haut dans la page, et masque une catégorie qui devient vide.
+// @description Masque les plats déjà affichés plus haut dans la page, les catégories devenues vides et leur entrée de sommaire.
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    const MARQUE = 'data-dedup-cache';   // marque posée sur les éléments qu'on masque
+    // Le carrousel « Articles en vedette » en haut de page reprend une bonne partie
+    // du menu : en pure priorité au premier affiché, il vide des catégories entières.
+    // true  = le plat est gardé dans sa vraie catégorie, le doublon du carrousel saute.
+    // false = strictement le premier affiché qui gagne.
+    const PRIORITE_MENU = true;
+
+    const MARQUE = 'data-dedup-cache';       // mémorise le display d'origine
+    const ITEM = '[data-testid^="store-item-"]';
+    const TITRE = '[data-testid="catalog-section-title"]';
+    const CARROUSEL = '[data-testid="store-desktop-catalog-section-carousel"]';
+
     let actif = true;
 
-    // --- Repérage des cartes de plat ---------------------------------------
-    // Uber Eats change souvent ses classes : on identifie une carte par le fait
-    // qu'elle contient un lien vers un item du menu, et on remonte au <li> parent.
-    function cartes() {
-        const liens = document.querySelectorAll('a[href*="/store/"]');
-        const vues = new Set();
-        const res = [];
-        liens.forEach(lien => {
-            const href = lien.getAttribute('href') || '';
-            // les liens de plat portent un modificateur de quick view ou un segment /item/
-            if (!/mod=quickView|modctx=|\/item\//.test(href)) return;
-            const tuile = lien.closest('li') || lien.parentElement;
-            if (!tuile || vues.has(tuile)) return;
-            vues.add(tuile);
-            res.push(tuile);
-        });
-        return res;
+    // Un plat est identifié par l'UUID de son data-testid : deux cartes du même plat
+    // portent le même UUID, quels que soient le libellé et la mise en forme.
+    const identifiant = el => el.getAttribute('data-testid').slice('store-item-'.length);
+
+    // Nom lisible (pour le log) : premier rich-text de la carte, hors badge « le plus aimé ».
+    function nomDuPlat(el) {
+        return [...el.querySelectorAll('[data-testid="rich-text"]')]
+            .map(e => e.textContent.trim())
+            .filter(t => t && !/le plus aimé/i.test(t))[0] || '';
     }
 
-    // Nom du plat : le premier titre de la carte, sinon la première ligne de texte.
-    function nomDuPlat(tuile) {
-        const titre = tuile.querySelector('h1, h2, h3, h4, h5, span[data-testid*="title"]');
-        const texte = (titre ? titre.textContent : tuile.textContent) || '';
-        return texte.trim().toLowerCase().replace(/\s+/g, ' ');
-    }
-
-    // Les titres de catégorie sont les headings qui ne sont PAS dans une carte.
-    function titresDeCategorie(tuiles) {
-        const dansUneCarte = el => tuiles.some(t => t.contains(el));
-        return Array.from(document.querySelectorAll('h1, h2, h3'))
-            .filter(h => h.textContent.trim() && !dansUneCarte(h));
-    }
+    // La tuile cliquable = le <li> qui enveloppe la carte.
+    const tuileDe = el => el.closest('li');
+    // Le bloc d'une catégorie (titre + grille, ou carrousel entier) = le <li> du titre.
+    const blocDe = titre => titre.closest('li');
 
     function masquer(el) {
-        if (el.getAttribute(MARQUE)) return;
+        if (!el || el.hasAttribute(MARQUE)) return;
         el.setAttribute(MARQUE, el.style.display || '');
         el.style.display = 'none';
     }
 
     function demasquerTout() {
-        document.querySelectorAll(`[${MARQUE}]`).forEach(el => {
+        document.querySelectorAll('[' + MARQUE + ']').forEach(el => {
             el.style.display = el.getAttribute(MARQUE);
             el.removeAttribute(MARQUE);
         });
     }
 
-    function visible(el) {
-        return !el.getAttribute(MARQUE) && el.offsetParent !== null;
-    }
+    const estMasque = el => el && el.hasAttribute(MARQUE);
 
     function nettoyer() {
         if (!actif) return;
 
-        const tuiles = cartes();
-        const dejaVus = new Set();
+        let cartes = [...document.querySelectorAll(ITEM)];
 
-        // 1) doublons : on garde la première occurrence dans l'ordre du document
-        tuiles.forEach(tuile => {
-            const nom = nomDuPlat(tuile);
-            if (!nom) return;
-            if (dejaVus.has(nom)) masquer(tuile);
-            else dejaVus.add(nom);
+        // Ordre de priorité : les cartes du menu d'abord, le carrousel ensuite.
+        // L'ordre du document est conservé à l'intérieur de chaque groupe.
+        if (PRIORITE_MENU) {
+            const dansCarrousel = el => !!el.closest(CARROUSEL);
+            cartes = [...cartes.filter(el => !dansCarrousel(el)),
+                      ...cartes.filter(dansCarrousel)];
+        }
+
+        // 1) doublons
+        const vus = new Set();
+        cartes.forEach(carte => {
+            const cle = identifiant(carte);
+            if (vus.has(cle)) masquer(tuileDe(carte));
+            else vus.add(cle);
         });
 
-        // 2) catégories devenues vides : plus aucune carte visible entre ce titre
-        //    et le titre suivant (comparaison par position dans le document).
-        const titres = titresDeCategorie(tuiles);
-        titres.forEach((titre, i) => {
-            const suivant = titres[i + 1] || null;
-            const dansLaSection = tuiles.filter(t => {
-                const apres = titre.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_FOLLOWING;
-                const avantLeSuivant = !suivant ||
-                    (suivant.compareDocumentPosition(t) & Node.DOCUMENT_POSITION_PRECEDING);
-                return apres && avantLeSuivant;
-            });
-            if (dansLaSection.length && !dansLaSection.some(visible)) {
-                // on masque le titre et, si elle existe, la section qui l'enveloppe
-                masquer(titre.closest('section') || titre);
+        // 2) catégories dont plus aucun plat n'est visible
+        const titresMasques = [];
+        document.querySelectorAll(TITRE).forEach(titre => {
+            const bloc = blocDe(titre);
+            if (!bloc) return;
+            const dedans = [...bloc.querySelectorAll(ITEM)];
+            if (dedans.length && dedans.every(c => estMasque(tuileDe(c)))) {
+                titresMasques.push(titre.textContent.trim());
+                masquer(bloc);
             }
         });
+
+        // 3) entrées de sommaire pointant vers une catégorie masquée
+        if (titresMasques.length) {
+            document.querySelectorAll('nav a, nav button').forEach(lien => {
+                if (titresMasques.includes(lien.textContent.trim())) {
+                    masquer(lien.closest('li') || lien);
+                }
+            });
+        }
     }
 
-    // Le menu se charge et se complète au scroll : on relance après chaque mutation.
+    // Le menu se complète au scroll : on relance après chaque salve de mutations.
     let timer = null;
-    const observer = new MutationObserver(() => {
+    new MutationObserver(() => {
         clearTimeout(timer);
         timer = setTimeout(nettoyer, 300);
-    });
-    observer.observe(document.body, { childList: true, subtree: true });
+    }).observe(document.body, { childList: true, subtree: true });
 
     // Alt+Shift+D : réafficher / remasquer les doublons
     document.addEventListener('keydown', e => {
         if (e.altKey && e.shiftKey && e.code === 'KeyD') {
             e.preventDefault();
             actif = !actif;
-            if (actif) nettoyer();
-            else demasquerTout();
+            if (actif) nettoyer(); else demasquerTout();
         }
     }, true);
 
