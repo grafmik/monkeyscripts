@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name        Instagram : barre de contrôle vidéo
 // @namespace   Violentmonkey Scripts
-// @version     2.0.0
+// @version     3.0.0
 //
 // @match       https://www.instagram.com/*
 // @grant       none
 //
 // @author      Mik
-// @description Barre de progression cliquable, lecture/pause et temps écoulé sur les vidéos Instagram (feed et reels).
+// @description Barre de progression cliquable, lecture/pause, temps écoulé et raccourcis clavier (← → espace) sur les vidéos Instagram (feed et reels).
 // ==/UserScript==
 
 (function() {
@@ -19,6 +19,8 @@
     // passer la barre DERRIÈRE les overlays (auteur, légende, boutons).
     const HAUTEUR = 34;         // hauteur de la barre, en px
     const MARGE_SURVOL = 8;     // tolérance autour de la vidéo pour garder la barre visible
+    const SAUT = 5;             // secondes gagnées par appui sur ← / →
+    const FLASH = 1200;         // ms d'affichage de la barre après un raccourci clavier
 
     const mmss = s => {
         if (!isFinite(s)) return '0:00';
@@ -75,6 +77,7 @@
     let cible = null;           // la vidéo actuellement contrôlée
     let souris = {x: -1, y: -1};
     let glisse = false;
+    let flashJusqua = 0;        // montre la barre un instant après un raccourci
 
     const zoneDe = v => v.getBoundingClientRect();
     const dansLaZone = r =>
@@ -107,7 +110,8 @@
             barre.style.top = Math.max(0, Math.min(r.bottom - HAUTEUR, innerHeight - HAUTEUR)) + 'px';
             // en portrait (reels), le bouton son d'Instagram occupe le coin bas droit
             barre.style.paddingRight = (r.height > r.width ? 46 : 12) + 'px';
-            barre.classList.toggle('bic-visible', glisse || dansLaZone(r));
+            barre.classList.toggle('bic-visible',
+                glisse || dansLaZone(r) || performance.now() < flashJusqua);
 
             const d = cible.duration || 0;
             remplie.style.width = d ? (cible.currentTime / d * 100) + '%' : '0';
@@ -149,6 +153,47 @@
     const relacher = e => { if (glisse) { capter(e); glisse = false; } };
     piste.addEventListener('pointerup', relacher);
     piste.addEventListener('pointercancel', relacher);
+
+    // --- Raccourcis clavier -------------------------------------------------
+    // Instagram lie déjà l'espace (lecture/pause de son côté, et défilement par
+    // défaut du navigateur) et les flèches (défilement, reel suivant/précédent).
+    // On écoute en phase de capture sur window et on coupe la propagation :
+    // l'événement n'atteint ni Instagram ni le comportement par défaut.
+    const champDeSaisie = el =>
+        !!el && (el.isContentEditable ||
+                 /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName));
+
+    function raccourci(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (champDeSaisie(e.target) || champDeSaisie(document.activeElement)) return;
+
+        const v = cible || choisirCible();
+        if (!v) return;
+
+        if (e.code === 'ArrowRight' || e.code === 'ArrowLeft') {
+            const sens = e.code === 'ArrowRight' ? 1 : -1;
+            // sur une vidéo courte, viser la fin exacte la ferait boucler
+            const fin = (v.duration || v.currentTime) - 0.15;
+            v.currentTime = Math.max(0, Math.min(fin, v.currentTime + sens * SAUT));
+        } else if (e.code === 'Space') {
+            if (v.paused) v.play(); else v.pause();
+        } else {
+            return;
+        }
+
+        cible = v;
+        flashJusqua = performance.now() + FLASH;
+        e.preventDefault();
+        e.stopImmediatePropagation();   // prive Instagram de la touche
+    }
+
+    addEventListener('keydown', raccourci, true);
+    // certains gestionnaires d'Instagram agissent sur keyup / keypress
+    addEventListener('keyup', e => {
+        if (!champDeSaisie(e.target) && ['ArrowRight', 'ArrowLeft', 'Space'].includes(e.code)) {
+            e.preventDefault(); e.stopImmediatePropagation();
+        }
+    }, true);
 
     requestAnimationFrame(boucle);
 })();

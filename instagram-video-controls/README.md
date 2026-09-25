@@ -18,6 +18,28 @@ sur la piste pour te déplacer dans la vidéo, clique sur ▶ / ❚❚ pour la
 lecture. La barre contrôle toujours la vidéo que tu survoles ; sans survol, elle
 suit la vidéo la plus visible à l'écran.
 
+### Raccourcis clavier
+
+| Touche | Effet |
+| --- | --- |
+| → | avance de 5 s |
+| ← | recule de 5 s |
+| Espace | lecture / pause |
+
+Ils fonctionnent sans survol (la barre s'affiche brièvement pour montrer où on
+en est) et **remplacent ceux d'Instagram**, mesurés avant/après :
+
+- sur `/reels/`, l'espace faisait passer au reel suivant — il met maintenant en
+  pause, et l'URL du reel ne bouge plus ;
+- dans le feed, l'espace faisait défiler la page d'un écran — le défilement ne
+  se produit plus ;
+- les flèches n'étaient utilisées ni par Instagram ni par le navigateur sur ces
+  deux pages : elles sont donc gagnées sans rien perdre.
+
+Quand le curseur est dans un champ de saisie (recherche, commentaire), les
+touches sont laissées à Instagram : vérifié en tapant « ab c » dans la recherche,
+l'espace arrive bien dans le champ.
+
 ## Choix d'implémentation (relevés sur le DOM réel)
 
 - **Une seule barre, en `position: fixed` sur `<body>`**, recalée à chaque frame
@@ -35,6 +57,12 @@ suit la vidéo la plus visible à l'écran.
   souvent sous le pli et la barre partait hors écran.
 - En portrait (reels), un `padding-right` de 46 px évite que le compteur passe
   sous le bouton son d'Instagram.
+- Les raccourcis sont interceptés **en phase de capture sur `window`**, avec
+  `preventDefault()` et `stopImmediatePropagation()` : c'est ce qui prive
+  Instagram de la touche. Le `keyup` est neutralisé aussi, certains gestionnaires
+  agissant à la remontée de touche.
+- Un saut de +5 s sur une vidéo courte tombait pile sur la fin et la faisait
+  boucler : la cible est bornée à `durée - 0,15 s`.
 
 ## Vérifié
 
