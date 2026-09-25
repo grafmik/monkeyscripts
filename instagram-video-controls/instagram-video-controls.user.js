@@ -36,13 +36,20 @@
     background: linear-gradient(transparent, rgba(0,0,0,.75));
     font: 12px/1 -apple-system, system-ui, sans-serif; color: #fff;
     opacity: 0; transition: opacity .15s ease;
+    /* la barre couvre toute la largeur de la vidéo : sans ceci, son fond avalerait
+       les clics destinés aux boutons d'Instagram placés dessous (le son, à droite).
+       Seuls les contrôles ci-dessous reprennent les clics. */
+    pointer-events: none;
 }
 #bic-barre.bic-visible { display: flex; opacity: 1; }
 #bic-barre button {
     all: unset; cursor: pointer; flex: none; width: 16px; text-align: center;
-    font-size: 13px; line-height: 1;
+    font-size: 13px; line-height: 1; pointer-events: auto;
 }
-#bic-piste { position: relative; flex: 1; height: ${HAUTEUR}px; cursor: pointer; display: flex; align-items: center; }
+#bic-piste {
+    position: relative; flex: 1; height: ${HAUTEUR}px; cursor: pointer;
+    display: flex; align-items: center; pointer-events: auto;
+}
 #bic-piste::before {
     content: ''; position: absolute; left: 0; right: 0; height: 3px;
     background: rgba(255,255,255,.4); border-radius: 2px;

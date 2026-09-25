@@ -61,6 +61,11 @@ l'espace arrive bien dans le champ.
   `preventDefault()` et `stopImmediatePropagation()` : c'est ce qui prive
   Instagram de la touche. Le `keyup` est neutralisé aussi, certains gestionnaires
   agissant à la remontée de touche.
+- La barre est `pointer-events: none`, et seuls le bouton et la piste reprennent
+  les clics (`pointer-events: auto`). Sans cela, son fond — large comme la vidéo
+  — avalait les clics destinés au **bouton son d'Instagram**, placé dessous en
+  bas à droite. Mesuré : avant, `elementFromPoint` sur le bouton son renvoyait la
+  barre et le bouton recevait 0 clic ; après, il les reçoit normalement.
 - Un saut de +5 s sur une vidéo courte tombait pile sur la fin et la faisait
   boucler : la cible est bornée à `durée - 0,15 s`.
 
