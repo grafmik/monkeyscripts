@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     2.0.0
+// @version     3.0.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Toutes les 10 minutes, en même temps sur tous les onglets, bloque la page 20 s : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Générique : il suffit d'ajouter des @match.
+// @description Après 7 minutes de défilement actif sur les 10 dernières, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -21,7 +21,17 @@
 
     const MOT = 'TROP';
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
-    const PERIODE = 10 * 60;    // secondes entre deux séquences
+    // Déclenchement : SEUIL_MIN minutes « actives » parmi les FENETRE_MIN dernières.
+    // Une minute est active si, onglet affiché, le site a chargé de nouveaux posts
+    // au plus DELAI_GESTE secondes après un geste (défilement, clic, touche).
+    const FENETRE_MIN = 10;
+    const SEUIL_MIN = 7;
+    const DELAI_GESTE = 30;
+    // Requêtes qui chargent des posts, par site. Sans motif pour le site courant,
+    // toute requête fetch/XHR compte.
+    // X : ses requêtes GraphQL de fil (HomeTimeline, SearchTimeline…) et de posts.
+    const POSTS_X = /\/i\/api\/graphql\/[^/]+\/(\w*Timeline|TweetDetail|UserTweets\w*|UserMedia|Likes|Bookmarks)\b/;
+    const REQUETES_POSTS = {'x.com': POSTS_X, 'twitter.com': POSTS_X, 'mobile.x.com': POSTS_X};
     // Chronologie, en secondes depuis le début de la séquence
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
     const T_COEUR = 9.7;        // fin des battements
@@ -45,34 +55,75 @@
     ];
     const POLICE = `'TropNoe', 'Futura', 'Impact', 'Haettenschweiler', 'Arial Narrow', sans-serif`;
 
-    // --- Synchronisation entre onglets -------------------------------------------
-    // L'heure de début de la dernière séquence est partagée dans le localStorage
-    // du site, commun à tous ses onglets. Chaque onglet en déduit la suivante :
-    // - une séquence est en cours (moins de 20 s) : l'onglet la rejoint, calé sur
-    //   la même horloge, et affiche exactement la même image ;
-    // - 10 min sont passées : le premier onglet VISIBLE en lance une nouvelle,
-    //   et l'événement « storage » fait démarrer tous les autres au même instant.
-    // Aucun onglet X visible à l'échéance : la séquence part dès qu'on y revient.
-    const CLE = 'trop:debut';
-    let debutMemoire = 0;       // repli si le localStorage est inaccessible
-    const lireDebut = () => {
-        try { return Number(localStorage.getItem(CLE)) || 0; } catch (e) { return debutMemoire; }
+    // --- Stockage partagé entre onglets --------------------------------------------
+    // localStorage du site, commun à tous ses onglets ; repli en mémoire s'il est
+    // inaccessible (l'onglet fonctionne alors seul).
+    const memoire = {};
+    const lire = cle => {
+        try { return localStorage.getItem(cle); } catch (e) { return memoire[cle] ?? null; }
     };
-    const ecrireDebut = d => {
-        debutMemoire = d;
-        try { localStorage.setItem(CLE, String(d)); } catch (e) { /* onglet isolé */ }
+    const ecrire = (cle, v) => {
+        memoire[cle] = v;
+        try { localStorage.setItem(cle, v); } catch (e) { /* onglet isolé */ }
+    };
+    const CLE = 'trop:debut', CLE_MINUTES = 'trop:minutes';
+    const lireDebut = () => Number(lire(CLE)) || 0;
+    const minuteCourante = () => Math.floor(Date.now() / 60000);
+    const lireMinutes = () => {
+        let m;
+        try { m = JSON.parse(lire(CLE_MINUTES) || '[]'); } catch (e) { m = []; }
+        const debutFenetre = minuteCourante() - FENETRE_MIN + 1;
+        return Array.isArray(m) ? m.filter(x => x >= debutFenetre) : [];
     };
 
-    let enCours = false;
+    // --- Mesure d'activité --------------------------------------------------------
+    // On OBSERVE les requêtes (PerformanceObserver) sans intercepter fetch ni XHR :
+    // rien de X n'est modifié, aucun conflit possible avec Minimal Twitter.
+    // Une minute ne compte qu'une fois, quel que soit le nombre d'onglets ou de
+    // requêtes : on mesure du temps passé, pas du volume.
+    let enCours = false;        // une séquence tourne dans cet onglet
+    let dernierGeste = -Infinity;
+    const noterGeste = () => {
+        if (document.visibilityState === 'visible') dernierGeste = performance.now();
+    };
+    ['wheel', 'scroll', 'keydown', 'pointerdown', 'touchmove'].forEach(t =>
+        window.addEventListener(t, noterGeste, {capture: true, passive: true}));
+
+    const motif = REQUETES_POSTS[location.hostname];
+    function surRequetes(liste) {
+        if (document.visibilityState !== 'visible' || enCours) return;
+        const utile = liste.getEntries().some(e =>
+            (e.initiatorType === 'fetch' || e.initiatorType === 'xmlhttprequest') &&
+            (!motif || motif.test(e.name)) &&
+            e.startTime >= dernierGeste && e.startTime - dernierGeste <= DELAI_GESTE * 1000);
+        if (!utile) return;
+        const minutes = lireMinutes(), m = minuteCourante();
+        if (minutes.includes(m)) return;
+        minutes.push(m);
+        ecrire(CLE_MINUTES, JSON.stringify(minutes));
+        verifier();
+    }
+    try {
+        new PerformanceObserver(surRequetes).observe({type: 'resource', buffered: true});
+    } catch (e) { /* navigateur trop ancien : jamais de déclenchement */ }
+
+    // --- Déclenchement synchronisé ----------------------------------------------------
+    // - une séquence est en cours (moins de 20 s) : l'onglet la rejoint, calé sur
+    //   la même horloge, et affiche exactement la même image ;
+    // - le seuil d'activité est atteint : l'onglet VISIBLE en lance une nouvelle,
+    //   remet le compteur à zéro, et l'événement « storage » fait démarrer tous
+    //   les autres onglets au même instant.
+
     function verifier() {
         const html = document.documentElement;
         if (!html || enCours) return;
         let debut = lireDebut();
         const maintenant = Date.now();
         if (maintenant - debut >= T_FIN * 1000) {
-            if (maintenant - debut < PERIODE * 1000 || document.visibilityState !== 'visible') return;
+            if (document.visibilityState !== 'visible' || lireMinutes().length < SEUIL_MIN) return;
             debut = maintenant;
-            ecrireDebut(debut);
+            ecrire(CLE_MINUTES, '[]');
+            ecrire(CLE, String(debut));
         }
         enCours = true;
         rituel(html, debut, () => { enCours = false; });

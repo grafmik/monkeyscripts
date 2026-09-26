@@ -1,7 +1,8 @@
 # TROP : pause forcée à la Gaspar Noé
 
-X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **toutes les
-10 minutes, en même temps sur tous les onglets X** : la page est **bloquée 20
+X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
+passé trop de temps** (7 minutes de défilement actif sur les 10 dernières), en
+même temps sur tous les onglets X : la page est **bloquée 20
 secondes** et le mot
 **TROP** envahit l'écran, en blanc sur noir, sur toute la largeur. Il bat comme
 un cœur qui s'emballe, se fissure, tombe en morceaux, puis la page réapparaît
@@ -52,22 +53,34 @@ Restent hors de portée d'une page web, par conception du navigateur : ⌘W,
 ⌘T, ⌘L, ⌘Q, la barre d'onglets. Fermer l'onglet reste donc possible, et c'est
 très bien comme ça.
 
-## Toutes les 10 minutes, synchronisé entre onglets
+## Quand ça se déclenche
 
-L'heure de début de la dernière séquence est partagée entre tous les onglets
-du site (via son `localStorage`) :
+Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment, c'est-à-dire
+**7 minutes actives sur les 10 dernières**.
 
-- en ouvrant X, si la dernière séquence date de plus de 10 min (ou n'a jamais
-  eu lieu), elle part tout de suite ; sinon, l'onglet attend la prochaine ;
-- à l'échéance, le premier onglet X **visible** lance la séquence et tous les
-  autres démarrent au même instant, sur la même horloge : passer d'un onglet à
-  l'autre montre exactement la même image, impossible d'y échapper en changeant
-  d'onglet ;
+Une minute est **active** si, pendant cette minute, l'onglet X est affiché et X
+a **chargé de nouveaux posts dans les 30 s suivant un geste** (défilement, clic,
+touche, tactile). Les rafraîchissements automatiques de X en arrière-plan ne
+comptent pas, et une minute ne compte qu'une fois quel que soit le nombre
+d'onglets ou de requêtes : on mesure du temps passé, pas du volume.
+
+Les chargements de posts sont repérés par leur URL (requêtes GraphQL de X dont
+l'opération se termine par `Timeline`, ou `TweetDetail`, `UserTweets`…) grâce à
+un `PerformanceObserver`, qui **observe** les requêtes sans intercepter `fetch`
+ni `XHR` : rien de X n'est modifié. Le motif est dans la constante
+`REQUETES_POSTS` ; si X renomme ses opérations, c'est là qu'il faut ajuster.
+Sur un site sans motif, toute requête `fetch`/`XHR` compte.
+
+Le compteur et l'heure de la dernière séquence sont partagés entre les onglets
+du site (`localStorage`, clés `trop:minutes` et `trop:debut`) :
+
+- quand le seuil est atteint, l'onglet affiché lance la séquence, remet le
+  compteur à zéro, et tous les autres onglets X démarrent au même instant, sur
+  la même horloge : changer d'onglet n'y échappe pas ;
 - un onglet ouvert pendant une séquence la rejoint là où elle en est ;
-- si aucun onglet X n'est visible à l'échéance, la séquence part dès qu'on
-  revient sur l'un d'eux.
+- après un TROP, il faut de nouveau 7 minutes actives pour le suivant.
 
-La période se règle avec la constante `PERIODE` (en secondes).
+Réglages : `SEUIL_MIN`, `FENETRE_MIN`, `DELAI_GESTE` en tête de script.
 
 ## Compatibilité avec Minimal Twitter
 
@@ -122,9 +135,11 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 - fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
   clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
   leur état d'origine ;
-- synchro testée sur 3 onglets : un onglet ouvert 5 s après le début rejoint la
-  séquence, tous finissent ensemble, un nouvel onglet ouvert dans les 10 min ne
-  relance rien, et à l'échéance les 3 onglets démarrent ensemble ;
+- mesure d'activité : rien à l'arrivée ; un chargement sans geste préalable ou
+  dans un onglet caché n'est pas compté ; geste puis chargement → la minute est
+  comptée ; 6 minutes actives → rien, 7 → TROP simultané sur 2 onglets et
+  compteur remis à zéro ; le motif d'URL reconnaît `HomeTimeline`,
+  `TweetDetail`, `UserTweetsAndReplies`… et ignore `Viewer`, `badge_count` ;
 - captures à chaque étape (entrée, battements, fissures, chute, fondu), en
   1440 × 900 et en portrait 390 × 844 : le mot tient dans la largeur.
 
