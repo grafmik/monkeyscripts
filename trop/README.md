@@ -1,7 +1,8 @@
 # TROP : pause forcée à la Gaspar Noé
 
-X est fait pour qu'on y reste. Ce script remet un temps d'arrêt à l'entrée : à
-chaque ouverture de x.com, la page est **bloquée 20 secondes** et le mot
+X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **toutes les
+10 minutes, en même temps sur tous les onglets X** : la page est **bloquée 20
+secondes** et le mot
 **TROP** envahit l'écran, en blanc sur noir, sur toute la largeur. Il bat comme
 un cœur qui s'emballe, se fissure, tombe en morceaux, puis la page réapparaît
 et on reprend la main.
@@ -51,9 +52,22 @@ Restent hors de portée d'une page web, par conception du navigateur : ⌘W,
 ⌘T, ⌘L, ⌘Q, la barre d'onglets. Fermer l'onglet reste donc possible, et c'est
 très bien comme ça.
 
-**Onglet ouvert en arrière-plan :** le compte à rebours ne démarre que quand
-on regarde l'onglet, et se met en pause si on en change. Les 20 s sont donc
-toujours vues en entier.
+## Toutes les 10 minutes, synchronisé entre onglets
+
+L'heure de début de la dernière séquence est partagée entre tous les onglets
+du site (via son `localStorage`) :
+
+- en ouvrant X, si la dernière séquence date de plus de 10 min (ou n'a jamais
+  eu lieu), elle part tout de suite ; sinon, l'onglet attend la prochaine ;
+- à l'échéance, le premier onglet X **visible** lance la séquence et tous les
+  autres démarrent au même instant, sur la même horloge : passer d'un onglet à
+  l'autre montre exactement la même image, impossible d'y échapper en changeant
+  d'onglet ;
+- un onglet ouvert pendant une séquence la rejoint là où elle en est ;
+- si aucun onglet X n'est visible à l'échéance, la séquence part dès qu'on
+  revient sur l'un d'eux.
+
+La période se règle avec la constante `PERIODE` (en secondes).
 
 ## Compatibilité avec Minimal Twitter
 
@@ -108,6 +122,9 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 - fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
   clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
   leur état d'origine ;
+- synchro testée sur 3 onglets : un onglet ouvert 5 s après le début rejoint la
+  séquence, tous finissent ensemble, un nouvel onglet ouvert dans les 10 min ne
+  relance rien, et à l'échéance les 3 onglets démarrent ensemble ;
 - captures à chaque étape (entrée, battements, fissures, chute, fondu), en
   1440 × 900 et en portrait 390 × 844 : le mot tient dans la largeur.
 

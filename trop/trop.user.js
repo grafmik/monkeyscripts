@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     1.0.0
+// @version     2.0.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description À chaque ouverture, bloque la page 20 s : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Générique : il suffit d'ajouter des @match.
+// @description Toutes les 10 minutes, en même temps sur tous les onglets, bloque la page 20 s : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -21,7 +21,8 @@
 
     const MOT = 'TROP';
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
-    // Chronologie, en secondes d'affichage réel (l'horloge s'arrête si l'onglet est caché)
+    const PERIODE = 10 * 60;    // secondes entre deux séquences
+    // Chronologie, en secondes depuis le début de la séquence
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
     const T_COEUR = 9.7;        // fin des battements
     const T_FISSURE = 10;       // première lettre qui se fissure
@@ -44,16 +45,61 @@
     ];
     const POLICE = `'TropNoe', 'Futura', 'Impact', 'Haettenschweiler', 'Arial Narrow', sans-serif`;
 
+    // --- Synchronisation entre onglets -------------------------------------------
+    // L'heure de début de la dernière séquence est partagée dans le localStorage
+    // du site, commun à tous ses onglets. Chaque onglet en déduit la suivante :
+    // - une séquence est en cours (moins de 20 s) : l'onglet la rejoint, calé sur
+    //   la même horloge, et affiche exactement la même image ;
+    // - 10 min sont passées : le premier onglet VISIBLE en lance une nouvelle,
+    //   et l'événement « storage » fait démarrer tous les autres au même instant.
+    // Aucun onglet X visible à l'échéance : la séquence part dès qu'on y revient.
+    const CLE = 'trop:debut';
+    let debutMemoire = 0;       // repli si le localStorage est inaccessible
+    const lireDebut = () => {
+        try { return Number(localStorage.getItem(CLE)) || 0; } catch (e) { return debutMemoire; }
+    };
+    const ecrireDebut = d => {
+        debutMemoire = d;
+        try { localStorage.setItem(CLE, String(d)); } catch (e) { /* onglet isolé */ }
+    };
+
+    let enCours = false;
+    function verifier() {
+        const html = document.documentElement;
+        if (!html || enCours) return;
+        let debut = lireDebut();
+        const maintenant = Date.now();
+        if (maintenant - debut >= T_FIN * 1000) {
+            if (maintenant - debut < PERIODE * 1000 || document.visibilityState !== 'visible') return;
+            debut = maintenant;
+            ecrireDebut(debut);
+        }
+        enCours = true;
+        rituel(html, debut, () => { enCours = false; });
+    }
+
+    // Police chargée une fois pour toutes (quelques ms au plus)
+    let policePrete = Promise.resolve();
+    try {
+        const futura = new FontFace('TropNoe', NOMS_FUTURA.map(n => `local('${n}')`).join(', '),
+                                    {weight: '800', stretch: 'condensed'});
+        document.fonts.add(futura);
+        policePrete = Promise.race([futura.load(), new Promise(r => setTimeout(r, 1500))]).catch(() => {});
+    } catch (e) { /* pas d'API FontFace : la pile de repli prend le relais */ }
+
     // Pour certains gestionnaires, document-start tombe avant même que <html>
     // existe : on attend alors sa création (aucune saisie possible entre-temps).
-    if (document.documentElement) rituel(document.documentElement);
+    if (document.documentElement) verifier();
     else new MutationObserver((_, o) => {
         if (!document.documentElement) return;
         o.disconnect();
-        rituel(document.documentElement);
+        verifier();
     }).observe(document, {childList: true});
+    addEventListener('storage', e => { if (e.key === CLE) verifier(); });
+    document.addEventListener('visibilitychange', verifier);
+    setInterval(verifier, 1000);
 
-    function rituel(html) {
+    function rituel(html, debut, surFin) {
 
         // --- 1. Verrouillage ----------------------------------------------------
         // Écouteurs posés dès document-start, en capture sur window : ils passent
@@ -294,17 +340,14 @@
         }
 
         // --- 6. Boucle --------------------------------------------------------------
-        // L'horloge n'avance que pendant l'affichage : ouvert dans un onglet en
-        // arrière-plan, le rituel attend qu'on le regarde, et reprend où il en était
-        // si on change d'onglet en cours de route.
-        let t = 0, precedent = null, termine = false;
+        // Horloge murale commune à tous les onglets : passer de l'un à l'autre en
+        // cours de séquence montre le même instant.
+        let t = 0, termine = false;
 
-        function image(maintenant) {
+        function image() {
             if (termine) return;
             try {
-                const dt = precedent === null ? 0 : Math.min(0.1, (maintenant - precedent) / 1000);
-                precedent = maintenant;
-                t += dt;
+                t = (Date.now() - debut) / 1000;
                 dessiner();
                 if (t >= T_FIN) return terminer();
                 requestAnimationFrame(image);
@@ -393,7 +436,6 @@
             EVENEMENTS.forEach(ev => window.removeEventListener(ev, bloquer, OPTIONS));
             document.removeEventListener('play', pasDeLecture, true);
             removeEventListener('resize', surRedimension);
-            document.removeEventListener('visibilitychange', demarrerSiVisible);
             guetteur.disconnect();
             if (corpsInerte) corpsInerte.inert = false;
             if (debordementAvant) html.style.setProperty('overflow', debordementAvant, prioriteAvant);
@@ -401,31 +443,15 @@
             if (html.getAttribute('style') === '') html.removeAttribute('style');
             try { hote.hidePopover(); } catch (e) { /* pas de popover */ }
             hote.remove();
+            surFin();
         }
 
         // --- 8. Départ ------------------------------------------------------------------
-        // L'écran reste noir tant que la police n'est pas prête (quelques ms au plus)
-        // et que l'onglet n'est pas visible.
-        let pret = false, lance = false;
-        function demarrerSiVisible() {
-            if (!pret || lance || document.visibilityState !== 'visible') return;
-            lance = true;
+        // L'écran est déjà noir ; l'animation part dès que la police est prête.
+        policePrete.then(() => {
+            if (termine) return;
             ajuster();
             requestAnimationFrame(image);
-        }
-        document.addEventListener('visibilitychange', demarrerSiVisible);
-
-        let chargement = Promise.resolve();
-        try {
-            const futura = new FontFace('TropNoe', NOMS_FUTURA.map(n => `local('${n}')`).join(', '),
-                                        {weight: '800', stretch: 'condensed'});
-            document.fonts.add(futura);
-            chargement = futura.load();
-        } catch (e) { /* pas d'API FontFace : la pile de repli prend le relais */ }
-        const delai = new Promise(r => setTimeout(r, 1500));
-        Promise.race([chargement, delai]).catch(() => {}).then(() => {
-            pret = true;
-            demarrerSiVisible();
         });
     }
 })();
