@@ -1,10 +1,11 @@
 // ==UserScript==
 // @name        Double Dette : sauter la fin du niveau
 // @namespace   Violentmonkey Scripts
-// @version     3.2.0
+// @version     3.5.0
 //
 // @match       https://double-dette.vercel.app/*
 // @run-at      document-start
+// @inject-into content
 // @noframes
 // @grant       none
 //
@@ -20,6 +21,10 @@
     // debug:{world, game} par niveau. On bloque le script d'entrée, on recharge
     // le bundle en y exposant cet objet (window.__ddSim), et on démarre le jeu
     // nous-mêmes.
+    //
+    // @inject-into content : en mode « page », la CSP du site bloque l'injection
+    // et Violentmonkey (Firefox) ne se rabat sur le monde isolé qu'une fois le jeu
+    // lancé, trop tard pour l'intercepter.
     //
     // Ce qui suit ne touche qu'au DOM : ça marche que le gestionnaire place le
     // script dans la page ou dans son monde isolé. Tout le code qui parle au jeu
@@ -55,8 +60,17 @@
     }
     diag('script actif, en attente du jeu…', false);
 
-    if ([...document.scripts].some(estEntree)) {
-        diag('chargé trop tard (le jeu tournait déjà)');
+    // Violentmonkey sous Firefox injecte souvent le script après la lecture de
+    // la balise du jeu (page en cache). Le module d'entrée ne s'exécute qu'en fin
+    // de lecture : il est trop tard pour le bloquer, pas pour le piéger (pageMain).
+    const dejaLa = [...document.scripts].find(estEntree);
+    if (dejaLa) {
+        if ((window.wrappedJSObject || window).__dd) {
+            diag('chargé trop tard (le jeu tournait déjà) : recharger la page');
+            return;
+        }
+        diag('jeu déjà en route, piège posé…', false);
+        injecter(dejaLa.src, false);
         return;
     }
 
@@ -68,23 +82,32 @@
             // changer son type suffit à l'empêcher de tourner.
             n.type = 'javascript/bloque';
             diag('jeu intercepté, chargement…', false);
-            suivrePage();
-            const code = `(${pageMain})(${JSON.stringify(n.src)});`;
-            const s = document.createElement('script');
-            s.type = 'module';
-            try {
-                s.src = urlBlobPage(code);
-            } catch (e) {
-                diag('blob impossible : ' + e);
-                relancerOrigine(n.src);
-                return;
-            }
-            s.onerror = () => { diag('module refusé par la page'); relancerOrigine(n.src); };
-            (document.head || document.documentElement).appendChild(s);
+            injecter(n.src, true);
             return;
         }
     });
     obs.observe(document, { childList: true, subtree: true });
+
+    function injecter(src, bloque) {
+        suivrePage(bloque ? src : null);
+        const code = `(${pageMain})(${JSON.stringify(src)}, ${bloque});`;
+        // Firefox (Violentmonkey) : un <script> créé depuis le monde isolé
+        // reste attaché à l'extension, et la page refuse de le charger ou d'y
+        // faire des import(). Créé par la page elle-même, il passe.
+        const d = document.wrappedJSObject || document;
+        const s = d.createElement('script');
+        s.type = 'module';
+        try {
+            s.src = urlBlobPage(code);
+        } catch (e) {
+            diag('blob impossible : ' + e);
+            if (bloque) relancerOrigine(src);
+            return;
+        }
+        // Pas d'onerror : sous Firefox, la page n'a pas le droit d'appeler une
+        // fonction du monde isolé. suivrePage() détecte un module resté muet.
+        d.head.appendChild(s);
+    }
 
     // Firefox : un blob: créé depuis le monde isolé d'une extension appartient à
     // l'extension, et la page refuse de le charger. On le fait donc créer par la
@@ -96,10 +119,18 @@
         return page.URL.createObjectURL(blob);
     }
 
-    function suivrePage() {
+    // srcBloque : script d'entrée à relancer si la page n'exécute jamais pageMain.
+    function suivrePage(srcBloque) {
+        const debut = Date.now();
         const t = setInterval(() => {
             const etat = document.documentElement.dataset.dds;
-            if (!etat) return;
+            if (!etat) {
+                if (Date.now() - debut < 10000) return;
+                clearInterval(t);
+                diag('module refusé par la page');
+                if (srcBloque) relancerOrigine(srcBloque);
+                return;
+            }
             if (etat === 'ok') {
                 clearInterval(t);
                 diag('prêt', false);
@@ -112,27 +143,87 @@
     }
 
     function relancerOrigine(src) {
-        const s = document.createElement('script');
+        // Créé par la page elle-même (Firefox refuse un module inséré par le monde isolé).
+        const d = document.wrappedJSObject || document;
+        const s = d.createElement('script');
         s.type = 'module';
         s.src = src;
-        document.head.appendChild(s);
+        d.head.appendChild(s);
     }
 
     // --- Tout ce qui suit tourne dans la page ----------------------------------
 
-    function pageMain(srcEntree) {
+    function pageMain(srcEntree, bloque) {
         const RECUL = 220;          // px laissés avant la ligne d'arrivée (ou le déclencheur du boss)
         const PV_BOSS = 1;          // PV laissés au boss final : un coup suffit
         const DELAI_RESULTATS = 1200; // ms avant de valider l'écran de résultats (il ignore les touches pendant 1 s)
 
         const signaler = etat => { document.documentElement.dataset.dds = etat; };
         signaler('page');
+
+        // Firefox refuse tout nouvel événement sur un paramètre audio pendant
+        // qu'une courbe y est en cours (Chrome l'accepte). Les fondus du jeu en
+        // enchaînent parfois deux à moins de 1,5 s, par exemple en début de
+        // niveau 2 après un saut, et le jeu part alors sur son écran d'erreur.
+        // Sur ce refus précis, on annule la courbe en cours et on rejoue l'appel ;
+        // si Firefox refuse encore (il garde la courbe active malgré l'annulation),
+        // on laisse tomber ce fondu : un réglage audio un peu en retard plutôt
+        // qu'une partie perdue.
+        for (const nom of ['setValueAtTime', 'linearRampToValueAtTime', 'exponentialRampToValueAtTime',
+            'setTargetAtTime', 'setValueCurveAtTime']) {
+            const orig = AudioParam.prototype[nom];
+            AudioParam.prototype[nom] = function(...args) {
+                try {
+                    return orig.apply(this, args);
+                } catch (e) {
+                    if (e.name !== 'NotSupportedError') throw e;
+                    this.cancelScheduledValues(0);
+                    try {
+                        return orig.apply(this, args);
+                    } catch (e2) {
+                        if (e2.name !== 'NotSupportedError') throw e2;
+                        return this;
+                    }
+                }
+            };
+        }
+
+        // Piège pour le jeu d'origine quand il n'a pas pu être bloqué : sa
+        // plateforme pose window.__dd dès sa création ; on fait échouer cette
+        // affectation, ce qui arrête son démarrage. Seule la nôtre passe.
+        let notreTour = false, bridge;
+        if (window.__dd) {
+            signaler('chargé trop tard (le jeu tournait déjà) : recharger la page');
+            return;
+        }
+        const ECARTE = '[double-dette-skip] jeu d\'origine écarté au profit du jeu patché';
+        Object.defineProperty(window, '__dd', {
+            configurable: true,
+            get: () => bridge,
+            set: v => {
+                if (!notreTour) throw new Error(ECARTE);
+                bridge = v;
+            },
+        });
+        // L'erreur du jeu écarté peut arriver après le démarrage du nôtre, dont le
+        // gestionnaire d'erreurs afficherait alors son « écran bleu ». Écoutés
+        // avant les siens, ces filtres l'arrêtent.
+        const taire = e => {
+            const err = e.reason || e.error;
+            if (err && err.message === ECARTE) { e.preventDefault(); e.stopImmediatePropagation(); }
+        };
+        window.addEventListener('unhandledrejection', taire, true);
+        window.addEventListener('error', taire, true);
+
         demarrer(srcEntree).catch(e => {
             signaler('chargement patché impossible : ' + (e && e.message || e));
-            if (window.__dd) return;    // le jeu tourne déjà (d'origine ou patché)
+            if (bridge) return;         // notre jeu tourne malgré l'erreur
+            // Rendre la main au jeu d'origine : piège retiré, entrée relancée
+            // (nouvelle URL : un module déjà évalué ne se réexécute pas).
+            delete window.__dd;
             const s = document.createElement('script');
             s.type = 'module';
-            s.src = srcEntree;
+            s.src = srcEntree + (bloque ? '' : '?relance');
             document.head.appendChild(s);
         });
 
@@ -152,12 +243,12 @@
             if (document.readyState === 'loading') {
                 await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
             }
-            // Firefox peut exécuter le script d'entrée malgré le blocage : le jeu
-            // d'origine aurait alors déjà posé son bridge window.__dd.
-            if (window.__dd) throw new Error('blocage raté, le jeu d\'origine tourne déjà');
             const { createPlatform } = await import(base + platform);
             const { createApp } = await import(blob);
-            const jeu = await createApp(createPlatform(document.getElementById('game')));
+            notreTour = true;
+            let plateforme;
+            try { plateforme = createPlatform(document.getElementById('game')); } finally { notreTour = false; }
+            const jeu = await createApp(plateforme);
             signaler('ok');
             await jeu.start();
         }
