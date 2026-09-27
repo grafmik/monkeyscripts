@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Double Dette : sauter la fin du niveau
 // @namespace   Violentmonkey Scripts
-// @version     3.0.0
+// @version     3.1.0
 //
 // @match       https://double-dette.vercel.app/*
 // @run-at      document-start
@@ -43,13 +43,23 @@
             const code = `(${pageMain})(${JSON.stringify(n.src)});`;
             const s = document.createElement('script');
             s.type = 'module';
-            s.src = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+            s.src = urlBlobPage(code);
             s.onerror = () => relancerOrigine(n.src);
             (document.head || document.documentElement).appendChild(s);
             return;
         }
     });
     obs.observe(document, { childList: true, subtree: true });
+
+    // Firefox : un blob: créé depuis le monde isolé d'une extension appartient à
+    // l'extension, et la page refuse de le charger. On le fait donc créer par la
+    // page elle-même (wrappedJSObject), en ne lui passant que des valeurs à elle.
+    function urlBlobPage(code) {
+        const page = window.wrappedJSObject;
+        if (!page) return URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+        const blob = new page.Blob(page.Array.of(code), page.JSON.parse('{"type":"text/javascript"}'));
+        return page.URL.createObjectURL(blob);
+    }
 
     function relancerOrigine(src) {
         console.error('[double-dette-skip] module injecté refusé, jeu d\'origine relancé');
