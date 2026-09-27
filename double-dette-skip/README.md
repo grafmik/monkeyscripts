@@ -1,10 +1,11 @@
 # Double Dette : sauter la fin du niveau
 
-Deux boutons en haut à droite de [Double Dette](https://double-dette.vercel.app/),
-sous « 2P », visibles seulement pendant un niveau (aussi au clavier : `N`, `M`) :
+Trois boutons en haut à droite de [Double Dette](https://double-dette.vercel.app/),
+sous « 2P », visibles seulement pendant un niveau (aussi au clavier : `B`, `N`, `M`) :
 
 | Bouton | Effet |
 | --- | --- |
+| Coup fatal (`B`) | Un coup qui vide l'énergie de **tout ce qui est à l'écran** : chaque ennemi et boss visible est mis KO par un vrai coup de ton personnage (score, combo, butin comptés), chaque objet cassable visible se casse. |
 | Quasi-fin (`N`) | **Quasi-fin** du niveau : ennemis et arènes réglés, le joueur est posé juste avant la fin réelle. Il reste quelques pas vers la droite, ou un coup à porter au boss final (laissé à 1 PV). Sur un niveau bonus, il reste 3 s au chrono. |
 | Niveau suivant (`M`) | Niveau suivant, directement |
 
@@ -62,10 +63,11 @@ seuls les boutons et les raccourcis sont inopérants.
 
 ## À savoir
 
-- `N` et `M` ne servent à rien dans le jeu, quelle que soit la disposition
+- `B`, `N` et `M` ne servent à rien dans le jeu, quelle que soit la disposition
   clavier choisie. Pendant un niveau, le script les garde pour lui.
 - Les boss des niveaux 3, 5, 6 et 7 ne sont pas encore dans la version en
   ligne du jeu : il termine ces combats instantanément. La quasi-fin y pose le
   joueur juste avant le déclencheur ; un pas en avant finit le niveau.
 - Testé le 2026-09-27 : Chrome (niveaux 1 à 4, bonus) et Firefox +
-  Violentmonkey (niveaux 1 et 2, boutons, rechargements successifs).
+  Violentmonkey (niveaux 1 et 2, boutons, rechargements successifs). Coup
+  fatal testé le 2026-09-28 dans Chrome (ennemis, poubelles, boss Tromp).

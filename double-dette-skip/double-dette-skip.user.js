@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Double Dette : sauter la fin du niveau
 // @namespace   Violentmonkey Scripts
-// @version     3.5.0
+// @version     3.6.0
 //
 // @match       https://double-dette.vercel.app/*
 // @run-at      document-start
@@ -10,7 +10,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Deux boutons en haut à droite (et les touches N / M) dans Double Dette : quasi-fin du niveau, niveau suivant.
+// @description Boutons en haut à droite (et touches B / N / M) dans Double Dette : coup fatal à tout l'écran, quasi-fin du niveau, niveau suivant.
 // ==/UserScript==
 
 (function() {
@@ -239,6 +239,11 @@
                 // Depuis un blob:, les chemins relatifs ne se résolvent plus.
                 .replace(/from"\.\/([\w-]+\.js)"/g, (_, f) => `from"${base}${f}"`)
                 .split('import.meta.url').join(JSON.stringify(base + app));
+            // Fonction interne qui applique un coup (celle de l'explosion des
+            // « rushers »), retrouvée par son usage et exposée pour la touche B.
+            // Introuvable : le reste marche, seul le coup fatal est indisponible.
+            const coupInterne = code.match(/Math\.abs\(n\.y-t\.y\)<=24&&(\w+)\(e,n,r,t,/);
+            if (coupInterne) code += `\n;window.__ddCoup=${coupInterne[1]};`;
             const blob = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
             if (document.readyState === 'loading') {
                 await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
@@ -319,6 +324,37 @@
             return 'Niveau suivant';
         }
 
+        // Un vrai coup du joueur (KO, score, butin) sur chaque ennemi ou boss
+        // visible, ramené d'abord à 1 PV ; les objets cassables visibles passent
+        // à 0 PV et le jeu les casse lui-même au tick suivant (son, butin, score).
+        const COUP = {
+            at: 0, active: 1, box: { x: -9999, z: 0, w: 19998, h: 400 }, tolY: 9999,
+            damage: 9999, strength: 'knockdown', reaction: 'knockdown', hitstun: 0,
+            knockback: { vx: 4, vz: 5 }, hitstop: { attacker: 0, target: 10 }, flags: ['radial'],
+            fx: { spark: 'heavy', sfx: 'hit_heavy', onomatopoeia: 'PAF !' },
+        };
+        function coupFatal(s) {
+            const w = s.world, frapper = window.__ddCoup;
+            if (!frapper) return 'Coup fatal indisponible (version du jeu)';
+            const joueur = [w.players[0], w.players[1]].find(p => p?.alive);
+            const gauche = w.camera.x, droite = gauche + s.game.t.camera.screenW;
+            let ennemis = 0, objets = 0;
+            for (const a of [...w.live]) {
+                if (!a.alive || a.x < gauche || a.x > droite) continue;
+                if (a.kind === 'enemy' || a.kind === 'boss') {
+                    if (a.hp <= 0) continue;
+                    a.hp = Math.min(a.hp, 1);
+                    frapper(w, a, COUP, joueur, joueur && a.x < joueur.x ? -1 : 1);
+                    ennemis++;
+                } else if (a.kind === 'prop' && a.propDef?.breakable && a.state !== 'broken') {
+                    a.hp = 0;
+                    if (joueur) a.lastHitBy = joueur.id;
+                    objets++;
+                }
+            }
+            return `Coup fatal : ${ennemis} ennemi${ennemis > 1 ? 's' : ''}, ${objets} objet${objets > 1 ? 's' : ''}`;
+        }
+
         // L'écran de résultats attend Entrée ; l'intro du niveau suivant avance seule.
         function validerResultats() {
             const debut = Date.now();
@@ -353,7 +389,7 @@
         // --- Clavier ---------------------------------------------------------------
 
         // e.key plutôt que e.code : « m » n'est pas au même endroit en AZERTY et en QWERTY.
-        const ACTIONS = { n: quasiFin, m: suivant };
+        const ACTIONS = { n: quasiFin, m: suivant, b: coupFatal };
         const action = e => ACTIONS[e.key.toLowerCase()];
 
         window.addEventListener('keydown', e => {
@@ -371,7 +407,7 @@
 
         // --- Boutons -----------------------------------------------------------
 
-        const BOUTONS = [['Quasi-fin', 'N', quasiFin], ['Niveau suivant', 'M', suivant]];
+        const BOUTONS = [['Coup fatal', 'B', coupFatal], ['Quasi-fin', 'N', quasiFin], ['Niveau suivant', 'M', suivant]];
         const barre = document.createElement('div');
         barre.style.cssText = 'position:fixed;top:9vh;right:1.5vw;z-index:9;display:none;gap:6px';
         for (const [texte, touche, fn] of BOUTONS) {
