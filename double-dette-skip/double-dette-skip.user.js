@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Double Dette : sauter la fin du niveau
 // @namespace   Violentmonkey Scripts
-// @version     1.0.0
+// @version     2.0.0
 //
 // @match       https://double-dette.vercel.app/*
 // @run-at      document-start
@@ -10,7 +10,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Raccourcis « , » (quasi-fin du niveau, puis niveau suivant au 2e appui) et « . » (niveau suivant directement) dans Double Dette.
+// @description Raccourcis N (quasi-fin du niveau) et M (niveau suivant) dans Double Dette.
 // ==/UserScript==
 
 (function() {
@@ -75,7 +75,6 @@
         const s = window.__ddSim;
         return window.__dd?.scene === 'level' && s?.game?.level ? s : null;
     };
-    let quasiFait = null;       // niveau (objet du jeu) sur lequel « , » a déjà servi
     let bossAAffaiblir = null;  // rencontre finale dont le boss doit tomber à PV_BOSS
 
     function teleporter(s, x) {
@@ -169,26 +168,21 @@
 
     // --- Clavier ---------------------------------------------------------------
 
+    // e.key plutôt que e.code : « m » n'est pas au même endroit en AZERTY et en QWERTY.
+    const ACTIONS = { n: quasiFin, m: suivant };
+    const action = e => ACTIONS[e.key.toLowerCase()];
+
     window.addEventListener('keydown', e => {
-        if (e.key !== ',' && e.key !== '.') return;
-        if (e.ctrlKey || e.metaKey || e.altKey || !e.isTrusted) return;
+        if (!action(e) || e.ctrlKey || e.metaKey || e.altKey || !e.isTrusted) return;
         const s = niveau();
         if (!s) return;
-        // Capture + arrêt : une des dispositions clavier du jeu met l'attaque sur « . ».
         e.preventDefault();
         e.stopImmediatePropagation();
         if (e.repeat || s.game.level.completeAt >= 0) return;
-        let msg;
-        if (e.key === '.' || quasiFait === s.game.level) {
-            msg = suivant(s);
-        } else {
-            quasiFait = s.game.level;
-            msg = quasiFin(s);
-        }
-        bulle(msg);
+        bulle(action(e)(s));
     }, true);
     window.addEventListener('keyup', e => {
-        if ((e.key === ',' || e.key === '.') && e.isTrusted && niveau()) e.stopImmediatePropagation();
+        if (action(e) && e.isTrusted && niveau()) e.stopImmediatePropagation();
     }, true);
 
     let bulleEl = null, bulleT = 0;

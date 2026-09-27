@@ -5,9 +5,8 @@ actifs seulement pendant un niveau :
 
 | Touche | Effet |
 | --- | --- |
-| `,` | **Quasi-fin** du niveau : ennemis et arènes réglés, le joueur est posé juste avant la fin réelle. Il reste quelques pas vers la droite, ou un coup à porter au boss final (laissé à 1 PV). Sur un niveau bonus, il reste 3 s au chrono. |
-| `,` (2ᵉ appui) | Niveau suivant |
-| `.` | Niveau suivant, directement |
+| `N` | **Quasi-fin** du niveau : ennemis et arènes réglés, le joueur est posé juste avant la fin réelle. Il reste quelques pas vers la droite, ou un coup à porter au boss final (laissé à 1 PV). Sur un niveau bonus, il reste 3 s au chrono. |
+| `M` | Niveau suivant, directement |
 
 « Niveau suivant » passe par la vraie fin du jeu (score, trophées, déblocage),
 puis valide tout seul l'écran de résultats. L'intro du niveau suivant avance
@@ -41,8 +40,8 @@ seuls les raccourcis sont inopérants.
 
 ## À savoir
 
-- Une des dispositions clavier du jeu met l'attaque sur `.` : pendant un
-  niveau, le script garde `,` et `.` pour lui.
+- `N` et `M` ne servent à rien dans le jeu, quelle que soit la disposition
+  clavier choisie. Pendant un niveau, le script les garde pour lui.
 - Les boss des niveaux 3, 5, 6 et 7 ne sont pas encore dans la version en
   ligne du jeu : il termine ces combats instantanément. La quasi-fin y pose le
   joueur juste avant le déclencheur ; un pas en avant finit le niveau.
