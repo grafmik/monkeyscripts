@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Double Dette : sauter la fin du niveau
 // @namespace   Violentmonkey Scripts
-// @version     3.1.0
+// @version     3.2.0
 //
 // @match       https://double-dette.vercel.app/*
 // @run-at      document-start
@@ -28,8 +28,35 @@
 
     const estEntree = n => n.tagName === 'SCRIPT' && n.type === 'module' && /\/assets\/index-[\w-]+\.js$/.test(n.src);
 
+    // Diagnostic visible en bas à droite, étape par étape, pour savoir sans
+    // console où le chargement s'arrête. La page répond via un attribut du DOM
+    // (data-dds), seul canal commun au monde isolé du gestionnaire et à la page.
+    let diagEl = null;
+    function diag(texte, erreur = true) {
+        console[erreur ? 'warn' : 'info']('[double-dette-skip] ' + texte);
+        if (!diagEl) {
+            diagEl = document.createElement('div');
+            diagEl.style.cssText = 'position:fixed;bottom:6px;right:6px;z-index:10;padding:3px 8px;'
+                + 'background:rgba(6,6,29,.85);border:1px solid;font:12px/1.3 system-ui,sans-serif;pointer-events:none';
+            poser(diagEl);
+        }
+        diagEl.textContent = 'double-dette-skip : ' + texte;
+        diagEl.style.color = diagEl.style.borderColor = erreur ? '#ff6b6b' : '#8fd18f';
+    }
+    // À document-start, la page n'a parfois pas encore d'élément racine.
+    function poser(el) {
+        if (document.documentElement) { (document.body || document.documentElement).appendChild(el); return; }
+        const o = new MutationObserver(() => {
+            if (!document.documentElement) return;
+            o.disconnect();
+            document.documentElement.appendChild(el);
+        });
+        o.observe(document, { childList: true });
+    }
+    diag('script actif, en attente du jeu…', false);
+
     if ([...document.scripts].some(estEntree)) {
-        console.warn('[double-dette-skip] injecté trop tard (après le chargement du jeu) : boutons indisponibles');
+        diag('chargé trop tard (le jeu tournait déjà)');
         return;
     }
 
@@ -40,11 +67,19 @@
             // Un observer passe avant l'exécution d'un script inséré par le parseur :
             // changer son type suffit à l'empêcher de tourner.
             n.type = 'javascript/bloque';
+            diag('jeu intercepté, chargement…', false);
+            suivrePage();
             const code = `(${pageMain})(${JSON.stringify(n.src)});`;
             const s = document.createElement('script');
             s.type = 'module';
-            s.src = urlBlobPage(code);
-            s.onerror = () => relancerOrigine(n.src);
+            try {
+                s.src = urlBlobPage(code);
+            } catch (e) {
+                diag('blob impossible : ' + e);
+                relancerOrigine(n.src);
+                return;
+            }
+            s.onerror = () => { diag('module refusé par la page'); relancerOrigine(n.src); };
             (document.head || document.documentElement).appendChild(s);
             return;
         }
@@ -61,8 +96,22 @@
         return page.URL.createObjectURL(blob);
     }
 
+    function suivrePage() {
+        const t = setInterval(() => {
+            const etat = document.documentElement.dataset.dds;
+            if (!etat) return;
+            if (etat === 'ok') {
+                clearInterval(t);
+                diag('prêt', false);
+                setTimeout(() => diagEl.remove(), 3000);
+            } else {
+                diag(etat, etat !== 'page');
+                if (etat !== 'page') clearInterval(t);
+            }
+        }, 300);
+    }
+
     function relancerOrigine(src) {
-        console.error('[double-dette-skip] module injecté refusé, jeu d\'origine relancé');
         const s = document.createElement('script');
         s.type = 'module';
         s.src = src;
@@ -76,8 +125,11 @@
         const PV_BOSS = 1;          // PV laissés au boss final : un coup suffit
         const DELAI_RESULTATS = 1200; // ms avant de valider l'écran de résultats (il ignore les touches pendant 1 s)
 
+        const signaler = etat => { document.documentElement.dataset.dds = etat; };
+        signaler('page');
         demarrer(srcEntree).catch(e => {
-            console.error('[double-dette-skip] chargement patché impossible, jeu d\'origine relancé', e);
+            signaler('chargement patché impossible : ' + (e && e.message || e));
+            if (window.__dd) return;    // le jeu tourne déjà (d'origine ou patché)
             const s = document.createElement('script');
             s.type = 'module';
             s.src = srcEntree;
@@ -100,9 +152,14 @@
             if (document.readyState === 'loading') {
                 await new Promise(r => document.addEventListener('DOMContentLoaded', r, { once: true }));
             }
+            // Firefox peut exécuter le script d'entrée malgré le blocage : le jeu
+            // d'origine aurait alors déjà posé son bridge window.__dd.
+            if (window.__dd) throw new Error('blocage raté, le jeu d\'origine tourne déjà');
             const { createPlatform } = await import(base + platform);
             const { createApp } = await import(blob);
-            await (await createApp(createPlatform(document.getElementById('game')))).start();
+            const jeu = await createApp(createPlatform(document.getElementById('game')));
+            signaler('ok');
+            await jeu.start();
         }
 
         // --- Sauts -----------------------------------------------------------------
