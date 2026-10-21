@@ -82,6 +82,22 @@ du site (`localStorage`, clés `trop:minutes` et `trop:debut`) :
 
 Réglages : `SEUIL_MIN`, `FENETRE_MIN`, `DELAI_GESTE` en tête de script.
 
+## Compte à rebours
+
+En haut à droite, un petit badge **« TROP dans 4:32 »**, mis à jour chaque
+seconde dans tous les onglets. C'est le temps **minimal** avant le prochain
+TROP si l'on défile sans s'arrêter : la première minute où la fenêtre glissante
+contiendrait 7 minutes actives, en comptant les minutes déjà actives qui y sont
+encore et toutes les minutes d'ici là.
+
+Comme le déclenchement dépend de l'activité, le compte ne descend pas
+forcément jusqu'à zéro : une pause fait remonter le chiffre (la minute n'est pas
+comptée), et les vieilles minutes qui sortent de la fenêtre aussi. À `0:00`, le
+prochain chargement de posts déclenche TROP.
+
+Le badge laisse passer les clics (`pointer-events: none`), vit dans un shadow
+root fermé comme la scène, et disparaît pendant la séquence.
+
 ## Compatibilité avec Minimal Twitter
 
 L'extension [Minimal Theme for Twitter](https://chromewebstore.google.com/detail/minimal-theme-for-twitter/pobhoodpcipjmedfenaigbeloiidbflp)

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     3.0.0
+// @version     3.1.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 7 minutes de défilement actif sur les 10 dernières, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Générique : il suffit d'ajouter des @match.
+// @description Après 7 minutes de défilement actif sur les 10 dernières, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -102,6 +102,7 @@
         minutes.push(m);
         ecrire(CLE_MINUTES, JSON.stringify(minutes));
         verifier();
+        majCompteur();
     }
     try {
         new PerformanceObserver(surRequetes).observe({type: 'resource', buffered: true});
@@ -138,17 +139,74 @@
         policePrete = Promise.race([futura.load(), new Promise(r => setTimeout(r, 1500))]).catch(() => {});
     } catch (e) { /* pas d'API FontFace : la pile de repli prend le relais */ }
 
+    // --- Compte à rebours ------------------------------------------------------------
+    // En haut à droite : le temps minimal avant le prochain TROP si l'on défile sans
+    // s'arrêter, c'est-à-dire la première minute T dont la fenêtre glissante
+    // contiendrait SEUIL_MIN minutes actives (celles déjà comptées et encore dans la
+    // fenêtre, plus toutes les minutes d'ici T). Une pause le fait remonter.
+    function secondesAvantTrop() {
+        const minutes = lireMinutes(), m = minuteCourante();
+        const dejaCompte = minutes.includes(m) ? 1 : 0;
+        for (let T = m; ; T++) {
+            const gardees = minutes.filter(x => x >= T - FENETRE_MIN + 1).length;
+            if (gardees + T - m + 1 - dejaCompte >= SEUIL_MIN) {
+                return Math.max(0, Math.ceil((T * 60000 - Date.now()) / 1000));
+            }
+        }
+    }
+
+    // Même blindage que la scène : enfant de <html>, shadow root fermé, et
+    // transparent aux clics (pointer-events: none) pour ne rien gêner sur X.
+    let affichage = null, hoteCompteur = null;
+    function majCompteur() {
+        const html = document.documentElement;
+        if (!html) return;
+        if (!hoteCompteur) {
+            hoteCompteur = document.createElement('trop-compteur');
+            const racine = hoteCompteur.attachShadow({mode: 'closed'});
+            const CSS = `
+    div {
+        position: fixed; top: 8px; right: 8px; z-index: 2147483646;
+        padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.72); color: #fff;
+        font: 800 condensed 15px/1.2 ${POLICE}; font-variant-numeric: tabular-nums;
+        letter-spacing: .04em; pointer-events: none; user-select: none;
+    }
+    `;
+            try {
+                const feuille = new CSSStyleSheet();
+                feuille.replaceSync(CSS);
+                racine.adoptedStyleSheets = [feuille];
+            } catch (e) {
+                const style = document.createElement('style');
+                style.textContent = CSS;
+                racine.appendChild(style);
+            }
+            affichage = document.createElement('div');
+            racine.appendChild(affichage);
+        }
+        // X peut remplacer le contenu de <html> : on se replace au besoin
+        if (hoteCompteur.parentNode !== html) html.appendChild(hoteCompteur);
+        hoteCompteur.style.setProperty('display', enCours ? 'none' : 'block', 'important');
+        if (enCours) return;
+        const s = secondesAvantTrop();
+        affichage.textContent = `${MOT} dans ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    }
+
     // Pour certains gestionnaires, document-start tombe avant même que <html>
     // existe : on attend alors sa création (aucune saisie possible entre-temps).
-    if (document.documentElement) verifier();
+    const toutVerifier = () => { verifier(); majCompteur(); };
+    if (document.documentElement) toutVerifier();
     else new MutationObserver((_, o) => {
         if (!document.documentElement) return;
         o.disconnect();
-        verifier();
+        toutVerifier();
     }).observe(document, {childList: true});
-    addEventListener('storage', e => { if (e.key === CLE) verifier(); });
-    document.addEventListener('visibilitychange', verifier);
-    setInterval(verifier, 1000);
+    addEventListener('storage', e => {
+        if (e.key === CLE) verifier();
+        if (e.key === CLE || e.key === CLE_MINUTES) majCompteur();
+    });
+    document.addEventListener('visibilitychange', toutVerifier);
+    setInterval(toutVerifier, 1000);
 
     function rituel(html, debut, surFin) {
 
