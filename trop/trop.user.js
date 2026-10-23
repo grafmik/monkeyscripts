@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     3.1.0
+// @version     3.2.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 7 minutes de défilement actif sur les 10 dernières, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 7 minutes de défilement actif sur les 10 dernières, ou 20 minutes sur x.com dans l'heure, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -27,6 +27,11 @@
     const FENETRE_MIN = 10;
     const SEUIL_MIN = 7;
     const DELAI_GESTE = 30;
+    // Ou bien : SEUIL_PRESENCE_MIN minutes d'onglet affiché sur les
+    // FENETRE_PRESENCE_MIN dernières, mesurées par tranches de TRANCHE_S secondes.
+    const FENETRE_PRESENCE_MIN = 60;
+    const SEUIL_PRESENCE_MIN = 20;
+    const TRANCHE_S = 10;
     // Requêtes qui chargent des posts, par site. Sans motif pour le site courant,
     // toute requête fetch/XHR compte.
     // X : ses requêtes GraphQL de fil (HomeTimeline, SearchTimeline…) et de posts.
@@ -66,15 +71,20 @@
         memoire[cle] = v;
         try { localStorage.setItem(cle, v); } catch (e) { /* onglet isolé */ }
     };
-    const CLE = 'trop:debut', CLE_MINUTES = 'trop:minutes';
+    const CLE = 'trop:debut', CLE_MINUTES = 'trop:minutes', CLE_PRESENCE = 'trop:presence';
     const lireDebut = () => Number(lire(CLE)) || 0;
     const minuteCourante = () => Math.floor(Date.now() / 60000);
-    const lireMinutes = () => {
+    const trancheCourante = () => Math.floor(Date.now() / (TRANCHE_S * 1000));
+    const TRANCHES_FENETRE = FENETRE_PRESENCE_MIN * 60 / TRANCHE_S;
+    const SEUIL_TRANCHES = SEUIL_PRESENCE_MIN * 60 / TRANCHE_S;
+    // Liste d'unités (minutes ou tranches) encore dans la fenêtre glissante
+    const lireListe = (cle, courant, fenetre) => {
         let m;
-        try { m = JSON.parse(lire(CLE_MINUTES) || '[]'); } catch (e) { m = []; }
-        const debutFenetre = minuteCourante() - FENETRE_MIN + 1;
-        return Array.isArray(m) ? m.filter(x => x >= debutFenetre) : [];
+        try { m = JSON.parse(lire(cle) || '[]'); } catch (e) { m = []; }
+        return Array.isArray(m) ? m.filter(x => x >= courant - fenetre + 1) : [];
     };
+    const lireMinutes = () => lireListe(CLE_MINUTES, minuteCourante(), FENETRE_MIN);
+    const lirePresence = () => lireListe(CLE_PRESENCE, trancheCourante(), TRANCHES_FENETRE);
 
     // --- Mesure d'activité --------------------------------------------------------
     // On OBSERVE les requêtes (PerformanceObserver) sans intercepter fetch ni XHR :
@@ -106,14 +116,25 @@
     }
     try {
         new PerformanceObserver(surRequetes).observe({type: 'resource', buffered: true});
-    } catch (e) { /* navigateur trop ancien : jamais de déclenchement */ }
+    } catch (e) { /* navigateur trop ancien : jamais de déclenchement par l'activité */ }
+
+    // --- Mesure de présence -------------------------------------------------------
+    // Chaque seconde, un onglet affiché marque la tranche de TRANCHE_S s en cours ;
+    // une tranche ne compte qu'une fois, quel que soit le nombre d'onglets.
+    function noterPresence() {
+        if (document.visibilityState !== 'visible' || enCours) return;
+        const tranches = lirePresence(), t = trancheCourante();
+        if (tranches.includes(t)) return;
+        tranches.push(t);
+        ecrire(CLE_PRESENCE, JSON.stringify(tranches));
+    }
 
     // --- Déclenchement synchronisé ----------------------------------------------------
     // - une séquence est en cours (moins de 20 s) : l'onglet la rejoint, calé sur
     //   la même horloge, et affiche exactement la même image ;
-    // - le seuil d'activité est atteint : l'onglet VISIBLE en lance une nouvelle,
-    //   remet le compteur à zéro, et l'événement « storage » fait démarrer tous
-    //   les autres onglets au même instant.
+    // - un des deux seuils (activité ou présence) est atteint : l'onglet VISIBLE en
+    //   lance une nouvelle, remet les deux compteurs à zéro, et l'événement
+    //   « storage » fait démarrer tous les autres onglets au même instant.
 
     function verifier() {
         const html = document.documentElement;
@@ -121,9 +142,11 @@
         let debut = lireDebut();
         const maintenant = Date.now();
         if (maintenant - debut >= T_FIN * 1000) {
-            if (document.visibilityState !== 'visible' || lireMinutes().length < SEUIL_MIN) return;
+            const trop = lireMinutes().length >= SEUIL_MIN || lirePresence().length >= SEUIL_TRANCHES;
+            if (document.visibilityState !== 'visible' || !trop) return;
             debut = maintenant;
             ecrire(CLE_MINUTES, '[]');
+            ecrire(CLE_PRESENCE, '[]');
             ecrire(CLE, String(debut));
         }
         enCours = true;
@@ -140,24 +163,29 @@
     } catch (e) { /* pas d'API FontFace : la pile de repli prend le relais */ }
 
     // --- Compte à rebours ------------------------------------------------------------
-    // En haut à droite : le temps minimal avant le prochain TROP si l'on défile sans
-    // s'arrêter, c'est-à-dire la première minute T dont la fenêtre glissante
-    // contiendrait SEUIL_MIN minutes actives (celles déjà comptées et encore dans la
-    // fenêtre, plus toutes les minutes d'ici T). Une pause le fait remonter.
-    function secondesAvantTrop() {
-        const minutes = lireMinutes(), m = minuteCourante();
-        const dejaCompte = minutes.includes(m) ? 1 : 0;
-        for (let T = m; ; T++) {
-            const gardees = minutes.filter(x => x >= T - FENETRE_MIN + 1).length;
-            if (gardees + T - m + 1 - dejaCompte >= SEUIL_MIN) {
-                return Math.max(0, Math.ceil((T * 60000 - Date.now()) / 1000));
+    // En haut à droite : le temps minimal avant le prochain TROP si l'on continue
+    // sans s'arrêter, pour chacun des deux seuils. C'est la première unité U (minute
+    // ou tranche) dont la fenêtre glissante contiendrait le seuil, en comptant les
+    // unités déjà comptées encore dans la fenêtre, plus toutes celles d'ici U.
+    // Une pause le fait remonter.
+    function attente(liste, courant, fenetre, seuil, dureeMs) {
+        const dejaCompte = liste.includes(courant) ? 1 : 0;
+        for (let u = courant; ; u++) {
+            const gardees = liste.filter(x => x >= u - fenetre + 1).length;
+            if (gardees + u - courant + 1 - dejaCompte >= seuil) {
+                return Math.max(0, Math.ceil((u * dureeMs - Date.now()) / 1000));
             }
         }
     }
+    const duree = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
+    // Un panneau, deux jauges : « défilement » (minutes actives, en cases) et
+    // « présence » (temps d'onglet affiché, en barre). Le titre donne le plus court
+    // des deux comptes à rebours, la jauge qui le fixe est en pleine lumière, et
+    // il vire au rouge dans la dernière minute.
     // Même blindage que la scène : enfant de <html>, shadow root fermé, et
     // transparent aux clics (pointer-events: none) pour ne rien gêner sur X.
-    let affichage = null, hoteCompteur = null;
+    let hoteCompteur = null, ui = null;
     function majCompteur() {
         const html = document.documentElement;
         if (!html) return;
@@ -165,12 +193,26 @@
             hoteCompteur = document.createElement('trop-compteur');
             const racine = hoteCompteur.attachShadow({mode: 'closed'});
             const CSS = `
-    div {
-        position: fixed; top: 8px; right: 8px; z-index: 2147483646;
-        padding: 3px 9px; border-radius: 6px; background: rgba(0,0,0,.72); color: #fff;
-        font: 800 condensed 15px/1.2 ${POLICE}; font-variant-numeric: tabular-nums;
-        letter-spacing: .04em; pointer-events: none; user-select: none;
+    .panneau {
+        position: fixed; top: 8px; right: 8px; z-index: 2147483646; width: 210px;
+        padding: 6px 10px 8px; border-radius: 8px; background: rgba(0,0,0,.8); color: #fff;
+        font-variant-numeric: tabular-nums; pointer-events: none; user-select: none;
+        box-shadow: 0 2px 10px rgba(0,0,0,.25);
     }
+    .titre { font: 800 condensed 18px/1.2 ${POLICE}; letter-spacing: .04em; transition: color .3s; }
+    .titre.urgent { color: #ff453a; }
+    .ligne {
+        display: grid; grid-template-columns: 62px 1fr 64px; align-items: center; gap: 6px;
+        margin-top: 4px; font: 600 11px/1.3 -apple-system, system-ui, sans-serif;
+        opacity: .5; transition: opacity .3s;
+    }
+    .ligne.proche { opacity: 1; }
+    .valeur { text-align: right; white-space: nowrap; }
+    .jauge { display: flex; gap: 2px; height: 6px; }
+    .case, .barre { flex: 1; border-radius: 2px; background: rgba(255,255,255,.22); }
+    .case.pleine { background: #fff; }
+    .barre { position: relative; overflow: hidden; }
+    .rempli { position: absolute; left: 0; top: 0; bottom: 0; background: #fff; }
     `;
             try {
                 const feuille = new CSSStyleSheet();
@@ -181,20 +223,51 @@
                 style.textContent = CSS;
                 racine.appendChild(style);
             }
-            affichage = document.createElement('div');
-            racine.appendChild(affichage);
+            // Construction au DOM, sans innerHTML (Trusted Types de x.com)
+            const el = (classe, parent, texte) => {
+                const n = document.createElement('div');
+                n.className = classe;
+                if (texte) n.textContent = texte;
+                parent.appendChild(n);
+                return n;
+            };
+            const panneau = el('panneau', racine);
+            const titre = el('titre', panneau);
+            const ligne = nom => {
+                const l = el('ligne', panneau);
+                el('nom', l, nom);
+                return {l, jauge: el('jauge', l), valeur: el('valeur', l)};
+            };
+            const def = ligne('défilement'), pres = ligne('présence');
+            const cases = Array.from({length: SEUIL_MIN}, () => el('case', def.jauge));
+            const rempli = el('rempli', el('barre', pres.jauge));
+            ui = {titre, def, pres, cases, rempli};
         }
         // X peut remplacer le contenu de <html> : on se replace au besoin
         if (hoteCompteur.parentNode !== html) html.appendChild(hoteCompteur);
         hoteCompteur.style.setProperty('display', enCours ? 'none' : 'block', 'important');
         if (enCours) return;
-        const s = secondesAvantTrop();
-        affichage.textContent = `${MOT} dans ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+
+        const minutes = lireMinutes(), tranches = lirePresence();
+        const sDef = attente(minutes, minuteCourante(), FENETRE_MIN, SEUIL_MIN, 60000);
+        const sPres = attente(tranches, trancheCourante(), TRANCHES_FENETRE, SEUIL_TRANCHES, TRANCHE_S * 1000);
+        const s = Math.min(sDef, sPres);
+        ui.titre.textContent = `${MOT} dans ${duree(s)}`;
+        ui.titre.classList.toggle('urgent', s < 60);
+        ui.def.l.classList.toggle('proche', sDef <= sPres);
+        ui.pres.l.classList.toggle('proche', sPres < sDef);
+
+        const n = Math.min(minutes.length, SEUIL_MIN);
+        ui.cases.forEach((c, i) => c.classList.toggle('pleine', i < n));
+        ui.def.valeur.textContent = `${n} / ${SEUIL_MIN} min`;
+        const vu = Math.min(tranches.length * TRANCHE_S, SEUIL_PRESENCE_MIN * 60);
+        ui.rempli.style.width = (100 * vu / (SEUIL_PRESENCE_MIN * 60)) + '%';
+        ui.pres.valeur.textContent = `${Math.floor(vu / 60)} / ${SEUIL_PRESENCE_MIN} min`;
     }
 
     // Pour certains gestionnaires, document-start tombe avant même que <html>
     // existe : on attend alors sa création (aucune saisie possible entre-temps).
-    const toutVerifier = () => { verifier(); majCompteur(); };
+    const toutVerifier = () => { noterPresence(); verifier(); majCompteur(); };
     if (document.documentElement) toutVerifier();
     else new MutationObserver((_, o) => {
         if (!document.documentElement) return;
@@ -203,7 +276,7 @@
     }).observe(document, {childList: true});
     addEventListener('storage', e => {
         if (e.key === CLE) verifier();
-        if (e.key === CLE || e.key === CLE_MINUTES) majCompteur();
+        if (e.key === CLE || e.key === CLE_MINUTES || e.key === CLE_PRESENCE) majCompteur();
     });
     document.addEventListener('visibilitychange', toutVerifier);
     setInterval(toutVerifier, 1000);

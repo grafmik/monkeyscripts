@@ -1,7 +1,8 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (7 minutes de défilement actif sur les 10 dernières), en
+passé trop de temps** (7 minutes de défilement actif sur les 10 dernières, ou
+20 minutes passées sur X dans la dernière heure), en
 même temps sur tous les onglets X : la page est **bloquée 20
 secondes** et le mot
 **TROP** envahit l'écran, en blanc sur noir, sur toute la largeur. Il bat comme
@@ -55,8 +56,17 @@ très bien comme ça.
 
 ## Quand ça se déclenche
 
-Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment, c'est-à-dire
-**7 minutes actives sur les 10 dernières**.
+Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. Deux
+seuils, le premier atteint déclenche :
+
+- **défilement** : **7 minutes actives sur les 10 dernières** (détaillé
+  ci-dessous) ;
+- **présence** : **20 minutes d'onglet X affiché sur la dernière heure
+  glissante**, qu'on défile ou non.
+
+Après un TROP, **les deux compteurs repartent de zéro**.
+
+### Défilement
 
 Une minute est **active** si, pendant cette minute, l'onglet X est affiché et X
 a **chargé de nouveaux posts dans les 30 s suivant un geste** (défilement, clic,
@@ -71,31 +81,54 @@ ni `XHR` : rien de X n'est modifié. Le motif est dans la constante
 `REQUETES_POSTS` ; si X renomme ses opérations, c'est là qu'il faut ajuster.
 Sur un site sans motif, toute requête `fetch`/`XHR` compte.
 
-Le compteur et l'heure de la dernière séquence sont partagés entre les onglets
-du site (`localStorage`, clés `trop:minutes` et `trop:debut`) :
+### Présence
+
+Chaque seconde, un onglet X affiché (onglet au premier plan, fenêtre non
+réduite) marque la tranche de 10 s en cours. Une tranche ne compte qu'une fois,
+même avec plusieurs onglets ; 20 minutes = 120 tranches dans les 60 dernières
+minutes. Les secondes pendant la séquence TROP ne comptent pas. Précision :
+±10 s par coup d'œil (un regard de 2 s compte une tranche entière).
+
+Réglages : `SEUIL_PRESENCE_MIN`, `FENETRE_PRESENCE_MIN`, `TRANCHE_S`.
+
+### Partage entre onglets
+
+Les compteurs et l'heure de la dernière séquence sont partagés entre les onglets
+du site (`localStorage`, clés `trop:minutes`, `trop:presence` et `trop:debut`) :
 
 - quand le seuil est atteint, l'onglet affiché lance la séquence, remet le
   compteur à zéro, et tous les autres onglets X démarrent au même instant, sur
   la même horloge : changer d'onglet n'y échappe pas ;
 - un onglet ouvert pendant une séquence la rejoint là où elle en est ;
-- après un TROP, il faut de nouveau 7 minutes actives pour le suivant.
+- après un TROP, il faut de nouveau 7 minutes actives ou 20 minutes de
+  présence pour le suivant.
 
 Réglages : `SEUIL_MIN`, `FENETRE_MIN`, `DELAI_GESTE` en tête de script.
 
-## Compte à rebours
+## Le panneau en haut à droite
 
-En haut à droite, un petit badge **« TROP dans 4:32 »**, mis à jour chaque
-seconde dans tous les onglets. C'est le temps **minimal** avant le prochain
-TROP si l'on défile sans s'arrêter : la première minute où la fenêtre glissante
-contiendrait 7 minutes actives, en comptant les minutes déjà actives qui y sont
-encore et toutes les minutes d'ici là.
+```
+TROP dans 3:06
+défilement  ■■■□□□□     3 / 7 min
+présence    ▬▬▬▬▬▬───  12 / 20 min
+```
 
-Comme le déclenchement dépend de l'activité, le compte ne descend pas
-forcément jusqu'à zéro : une pause fait remonter le chiffre (la minute n'est pas
-comptée), et les vieilles minutes qui sortent de la fenêtre aussi. À `0:00`, le
-prochain chargement de posts déclenche TROP.
+Mis à jour chaque seconde, dans tous les onglets :
 
-Le badge laisse passer les clics (`pointer-events: none`), vit dans un shadow
+- **le titre** donne le temps **minimal** avant le prochain TROP si l'on
+  continue sans s'arrêter : le plus court des deux comptes à rebours. Il
+  passe **au rouge dans la dernière minute** ;
+- **défilement** : une case par minute active, sur les 7 du seuil ;
+- **présence** : une barre qui se remplit jusqu'aux 20 minutes ;
+- la jauge qui fixe le compte à rebours est en pleine lumière, l'autre est
+  atténuée.
+
+Le compte ne descend pas forcément jusqu'à zéro : une pause le fait remonter
+(la minute ou les secondes ne sont pas comptées), comme les vieilles minutes
+qui sortent de la fenêtre. À `0:00` côté défilement, c'est le prochain
+chargement de posts qui déclenche TROP ; côté présence, il part tout seul.
+
+Le panneau laisse passer les clics (`pointer-events: none`), vit dans un shadow
 root fermé comme la scène, et disparaît pendant la séquence.
 
 ## Compatibilité avec Minimal Twitter
@@ -156,6 +189,10 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   comptée ; 6 minutes actives → rien, 7 → TROP simultané sur 2 onglets et
   compteur remis à zéro ; le motif d'URL reconnaît `HomeTimeline`,
   `TweetDetail`, `UserTweetsAndReplies`… et ignore `Viewer`, `badge_count` ;
+- présence (v3.2, Chrome, page locale) : un onglet affiché ajoute une tranche
+  par 10 s ; à la 120e tranche, TROP part sans aucun défilement et les deux
+  compteurs sont remis à zéro ; le panneau affiche les deux jauges, passe au
+  rouge sous la minute et disparaît pendant la séquence ;
 - captures à chaque étape (entrée, battements, fissures, chute, fondu), en
   1440 × 900 et en portrait 390 × 844 : le mot tient dans la largeur.
 
