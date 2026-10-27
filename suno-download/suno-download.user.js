@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        Suno : télécharger la librairie ou l'écran
 // @namespace   Violentmonkey Scripts
-// @version     1.0.0
+// @version     1.2.1
 //
 // @match       https://suno.com/*
 // @run-at      document-idle
@@ -11,9 +11,10 @@
 // @grant       GM_setValue
 // @grant       GM_registerMenuCommand
 // @connect     suno-data-uploads.s3.amazonaws.com
+// @connect     cdn*.suno.ai
 //
 // @author      Mik
-// @description Récupère en MP3 toutes les chansons de sa librairie Suno, ou celles visibles à l'écran, dans ~/Downloads/suno-<compte> (ex. suno-grafmik). Passe par le téléchargement officiel de Suno : seules les chansons débloquées sont récupérées, les autres sont listées.
+// @description Récupère en MP3 toutes les chansons de sa librairie Suno, ou celles visibles à l'écran, dans ~/Downloads/suno-<compte> (ex. suno-grafmik). Téléchargement officiel pour les chansons débloquées ; les non débloquées (quota) sont récupérées directement via leur flux d'écoute (audio_url), sans appel API en plus. Téléchargements en parallèle (jusqu'à 4).
 // ==/UserScript==
 
 (function() {
@@ -21,6 +22,7 @@
 
     const API = 'https://studio-api-prod.suno.com';
     const ATTENTE_PRET_S = 90;   // délai max pendant que Suno prépare un MP3 (« processing »)
+    const CONCURRENCE = 4;       // téléchargements en parallèle pour aller plus vite en librairie
     const ID_RE = /\/song\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/;
 
     const pause = ms => new Promise(r => setTimeout(r, ms));
@@ -75,16 +77,36 @@
         return [...ids];
     }
 
-    // Adresse du MP3 par le téléchargement officiel ; null si la chanson n'est pas débloquée.
-    async function adresseMp3(id) {
-        const fin = Date.now() + ATTENTE_PRET_S * 1000;
-        while (true) {
-            const j = await api(`/api/download/clip/${id}?format=mp3`);
-            if (j.download_url) return j.download_url;
-            if (j.ok === false) return null;                 // not_authorized : pas débloquée
-            if (Date.now() > fin) throw new Error('MP3 toujours en préparation chez Suno');
-            await pause(2500);                               // status « processing »
+    // Flux d'écoute d'un clip : URL directe du MP3 servi par le CDN, sans avoir à
+    // « débloquer » la chanson (pas besoin de consommer le quota de téléchargements).
+    async function adresseStream(id) {
+        const j = await api('/api/clip/' + id);
+        const url = j.audio_url || j.source_stream_audio_url || j.stream_audio_url || j.source_audio_url;
+        if (!url) throw new Error('pas de flux d\'écoute disponible');
+        return url;
+    }
+
+    // Adresse du MP3 d'un clip. Pour une chanson non débloquée, on utilise directement
+    // le flux d'écoute (audio_url) déjà présent dans les données de la librairie ou du
+    // clip lu à l'écran : aucun appel API supplémentaire, aucun quota consommé. Pour une
+    // chanson débloquée, on passe par le téléchargement officiel (fichier fiable).
+    async function adresseMp3(clip) {
+        const urlFlux = clip.audio_url || clip.source_stream_audio_url || clip.stream_audio_url || clip.source_audio_url;
+        if (clip.is_download_unlocked === false) {
+            if (urlFlux) return urlFlux;                     // flux d'écoute déjà dans les données
+        } else {
+            const fin = Date.now() + ATTENTE_PRET_S * 1000;
+            while (true) {
+                const j = await api(`/api/download/clip/${clip.id}?format=mp3`);
+                if (j.download_url) return j.download_url;
+                if (j.ok === false) break;                   // not_authorized : finalement pas débloquée
+                if (Date.now() > fin) throw new Error('MP3 toujours en préparation chez Suno');
+                await pause(2500);                           // status « processing »
+            }
         }
+        // Repli : les données ne portaient pas le flux (ex. lecture à l'écran échouée),
+        // on va le chercher via /api/clip/<id>.
+        return adresseStream(clip.id);
     }
 
     // ---------- Écriture des fichiers ----------
@@ -127,20 +149,46 @@
         return racine.name === nom ? racine : racine.getDirectoryHandle(nom, { create: true });
     }
 
+    // Un vrai MP3 commence par « ID3 » ou par un header de trame MPEG (0xFF 0xE0…).
+    // Quand le CDN refuse le flux d'écoute, il renvoie une petite erreur XML
+    // (≈ 111 octets) : on ne veut pas l'enregistrer en `.mp3`.
+    function mp3Valide(buf) {
+        if (buf.byteLength < 1024) return false;   // un MP3 fait au moins ~1 Ko
+        const d = new Uint8Array(buf);
+        if (d[0] === 0x49 && d[1] === 0x44 && d[2] === 0x33) return true;   // « ID3 »
+        for (let i = 0; i < Math.min(d.length - 1, 32); i++) {
+            if (d[i] === 0xFF && (d[i + 1] & 0xE0) === 0xE0) return true;   // sync MPEG
+            if (d[i] !== 0) break;   // octet non nul qui n'est pas un sync : pas un MP3
+        }
+        return false;
+    }
+
     async function existe(dossier, fichier) {
-        try { await dossier.getFileHandle(fichier); return true; } catch { return false; }
+        try {
+            const meta = await (await dossier.getFileHandle(fichier)).getFile();
+            return meta.size > 1024;   // un fichier de 111 octets est une erreur du CDN : à refaire
+        } catch { return false; }
     }
 
     async function ecrireFsa(dossier, fichier, url) {
-        const r = await fetch(url);
+        const r = await fetch(url, { credentials: 'include' });   // cookie signé CloudFront pour le flux
         if (!r.ok) throw new Error('MP3 : HTTP ' + r.status);
+        const buf = await r.arrayBuffer();
+        if (!mp3Valide(buf)) throw new Error('réponse non-MP3 (CDN refusé ?)');
         const f = await (await dossier.getFileHandle(fichier, { create: true })).createWritable();
-        await r.body.pipeTo(f);
+        await f.write(buf);
+        await f.close();
     }
 
     // Ailleurs (Firefox) : GM_download avec un sous-dossier (Tampermonkey : régler
     // « Download Mode » sur « Browser API »). Les chansons faites sont mémorisées.
-    function ecrireGm(nom, fichier, url) {
+    // On vérifie d'abord le contenu (un fetch, pas d'écriture) pour ne pas laisser
+    // une erreur XML du CDN arriver en `.mp3`.
+    async function ecrireGm(nom, fichier, url) {
+        const r = await fetch(url, { credentials: 'include' });
+        if (!r.ok) throw new Error('MP3 : HTTP ' + r.status);
+        const buf = await r.arrayBuffer();
+        if (!mp3Valide(buf)) throw new Error('réponse non-MP3 (CDN refusé ?)');
         return new Promise((ok, ko) => GM_download({
             url, name: `${nom}/${fichier}`, conflictAction: 'overwrite', saveAs: false,
             onload: ok, onerror: e => ko(new Error('GM_download : ' + (e?.error || 'échec'))),
@@ -176,28 +224,34 @@
                 }
             }
 
-            let ok = 0, deja = 0;
-            const bloquees = [], erreurs = [];
-            for (const [i, clip] of clips.entries()) {
-                const fichier = nomFichier(clip);
-                etat(`${i + 1}/${clips.length} · ${clip.title || clip.id}`);
-                if (fsa ? await existe(dossier, fichier) : faits.has(clip.id)) { deja++; continue; }
-                if (clip.is_download_unlocked === false) { bloquees.push(clip); continue; }
-                try {
-                    const url = await adresseMp3(clip.id);
-                    if (!url) { bloquees.push(clip); continue; }
-                    if (fsa) await ecrireFsa(dossier, fichier, url);
-                    else { await ecrireGm(nom, fichier, url); faits.add(clip.id); GM_setValue('faits:' + nom, [...faits]); }
-                    ok++;
-                } catch (e) {
-                    erreurs.push(`${clip.title || clip.id} : ${e.message}`);
+            let ok = 0, deja = 0, flux = 0;
+            const erreurs = [];
+            let suivant = 0;
+            const travailleurs = Array(Math.min(CONCURRENCE, clips.length)).fill().map(async () => {
+                while (suivant < clips.length) {
+                    const i = suivant++;
+                    const clip = clips[i];
+                    const fichier = nomFichier(clip);
+                    etat(`${i + 1}/${clips.length} · ${clip.title || clip.id}`);
+                    if (fsa ? await existe(dossier, fichier) : faits.has(clip.id)) { deja++; continue; }
+                    try {
+                        const url = await adresseMp3(clip);
+                        // adresseMp3 : téléchargement officiel (débloquée), sinon flux d'écoute.
+                        // L'URL officielle vient toujours du bucket s3 ; les autres sont le flux d'écoute.
+                        if (!/suno-data-uploads\.s3\.amazonaws\.com/.test(url)) flux++;
+                        if (fsa) await ecrireFsa(dossier, fichier, url);
+                        else { await ecrireGm(nom, fichier, url); faits.add(clip.id); }
+                        ok++;
+                    } catch (e) {
+                        erreurs.push(`${clip.title || clip.id} : ${e.message}`);
+                    }
                 }
-            }
+            });
+            await Promise.all(travailleurs);
+            if (!fsa) GM_setValue('faits:' + nom, [...faits]);   // mémorise tout d'un coup (évite les courses)
 
             const lignes = [`~/Downloads/${nom} : ${ok} téléchargée(s), ${deja} déjà là.`];
-            if (bloquees.length) lignes.push(
-                `${bloquees.length} non débloquée(s) chez Suno (⋯ → Download → Unlock, consomme un téléchargement) :`,
-                ...bloquees.map(c => '  · ' + (c.title || c.id)));
+            if (flux) lignes.push(`${flux} récupérée(s) via le flux d'écoute (non débloquée(s), sans consommer le quota).`);
             if (erreurs.length) lignes.push(`${erreurs.length} erreur(s) :`, ...erreurs.map(e => '  · ' + e));
             etat(lignes.join('\n'));
             console.info('[suno-download]\n' + lignes.join('\n'));

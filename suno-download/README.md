@@ -25,13 +25,24 @@ ouvrir directement
 
 ## Chansons non débloquées
 
-Le script passe par le **téléchargement officiel** de Suno. Sur un compte
-gratuit, une chanson ne se télécharge qu'une fois « débloquée » (menu ⋯ →
-Download → MP3 → *Unlock & Download*), ce qui consomme un téléchargement du
-quota. Le script ne débloque rien lui-même : il liste à la fin les chansons
-non débloquées, à débloquer à la main si on les veut.
+Le script passe par le **téléchargement officiel** de Suno pour une chanson
+débloquée. Sur un compte gratuit, une chanson ne se télécharge officiellement
+qu'une fois « débloquée » (menu ⋯ → Download → MP3 → *Unlock & Download*),
+ce qui consomme un téléchargement du quota.
 
-Il n'enregistre pas le flux d'écoute pour contourner ce quota.
+Pour une chanson **non débloquée**, le script ne passe pas du tout par le
+téléchargement officiel : il utilise directement le **flux d'écoute** du clip
+(`audio_url`, l'URL directe du MP3 servi par le CDN), qui est déjà dans les
+données de la librairie ou du clip lu à l'écran — **aucun appel API
+supplémentaire, rien n'est débloqué, aucun quota consommé**. À la fin il
+indique combien de chansons ont été récupérées ainsi.
+
+Le flux est récupéré avec les identifiants du navigateur (cookie signé
+CloudFront) et **chaque téléchargement est vérifié** : une réponse qui n'est
+pas un vrai MP3 (par ex. une petite erreur XML du CDN, ~111 octets) n'est
+**pas enregistrée** et compte comme erreur. Les fichiers de ~111 octets déjà
+présents sont considérés comme à refaire et seront retéléchargés au prochain
+lancement.
 
 ## Où vont les fichiers
 
@@ -58,4 +69,6 @@ Tout passe par l'API de suno.com, avec la session déjà ouverte (cookie
 | Nom du compte | `GET studio-api-prod.suno.com/api/session/` → `user.handle` |
 | Librairie | `GET /api/feed/v2?page=N` (20 par page, jusqu'à `has_more: false`) |
 | Chanson à l'écran | `a[href*="/song/<id>"]` visibles, puis `GET /api/clip/<id>` |
-| MP3 | `GET /api/download/clip/<id>?format=mp3` → `download_url` (après un ou deux « processing ») ; `not_authorized` si non débloquée |
+| MP3 | `GET /api/download/clip/<id>?format=mp3` → `download_url` (après un ou deux « processing ») |
+| Flux d'écoute | chanson non débloquée : `audio_url` déjà dans les données (librairie ou `/api/clip/<id>`), sans appel API en plus |
+| Téléchargements | jusqu'à 4 en parallèle (`CONCURRENCE`), pour les grosses librairies |
