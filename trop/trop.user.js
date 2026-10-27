@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     3.2.0
+// @version     4.0.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 7 minutes de défilement actif sur les 10 dernières, ou 20 minutes sur x.com dans l'heure, bloque 20 s tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, se fissure et tombe en morceaux. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 20 minutes sur x.com dans l'heure (défiler les consomme 3 fois plus vite), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -21,30 +21,23 @@
 
     const MOT = 'TROP';
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
-    // Déclenchement : SEUIL_MIN minutes « actives » parmi les FENETRE_MIN dernières.
-    // Une minute est active si, onglet affiché, le site a chargé de nouveaux posts
-    // au plus DELAI_GESTE secondes après un geste (défilement, clic, touche).
-    const FENETRE_MIN = 10;
-    const SEUIL_MIN = 7;
-    const DELAI_GESTE = 30;
-    // Ou bien : SEUIL_PRESENCE_MIN minutes d'onglet affiché sur les
-    // FENETRE_PRESENCE_MIN dernières, mesurées par tranches de TRANCHE_S secondes.
-    const FENETRE_PRESENCE_MIN = 60;
-    const SEUIL_PRESENCE_MIN = 20;
+    // Déclenchement : un budget de BUDGET_MIN minutes sur les FENETRE_MIN dernières.
+    // Chaque seconde d'onglet affiché en coûte une ; une seconde passée à défiler
+    // en coûte COUT_DEFILEMENT. Mesuré par tranches de TRANCHE_S secondes.
+    const FENETRE_MIN = 60;
+    const BUDGET_MIN = 20;
+    const COUT_DEFILEMENT = 3;
     const TRANCHE_S = 10;
-    // Requêtes qui chargent des posts, par site. Sans motif pour le site courant,
-    // toute requête fetch/XHR compte.
-    // X : ses requêtes GraphQL de fil (HomeTimeline, SearchTimeline…) et de posts.
-    const POSTS_X = /\/i\/api\/graphql\/[^/]+\/(\w*Timeline|TweetDetail|UserTweets\w*|UserMedia|Likes|Bookmarks)\b/;
-    const REQUETES_POSTS = {'x.com': POSTS_X, 'twitter.com': POSTS_X, 'mobile.x.com': POSTS_X};
     // Chronologie, en secondes depuis le début de la séquence
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
-    const T_COEUR = 9.7;        // fin des battements
-    const T_FISSURE = 10;       // première lettre qui se fissure
-    const ECART_FISSURE = 0.45; // délai entre les fissures de deux lettres
-    const T_CHUTE = 12.4;       // les éclats commencent à tomber
-    const T_FONDU = 16.2;       // le noir s'efface et laisse voir la page
-    const T_FIN = 20;           // la page est rendue à l'utilisateur
+    const T_COEUR = 19.7;       // fin des battements
+    const T_FISSURE = 20;       // première lettre qui se fissure
+    const T_AVANT_CHUTE = 1.2;  // entre la fissure d'une lettre et la chute de ses éclats
+    const DUREE_BRIS = 3;       // d'une fissure à la disparition des derniers éclats
+    const PAUSE_LETTRES = 3;    // silence entre deux lettres
+    const ECART_FISSURE = DUREE_BRIS + PAUSE_LETTRES;
+    const T_FONDU = T_FISSURE + (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS;  // le noir s'efface
+    const T_FIN = T_FONDU + 3.8;  // la page est rendue à l'utilisateur
     const BPM_DEBUT = 58, BPM_FIN = 104;  // le cœur s'emballe
     const IMAGES_PAR_S = 24;    // le tremblement saute comme une pellicule
 
@@ -71,70 +64,65 @@
         memoire[cle] = v;
         try { localStorage.setItem(cle, v); } catch (e) { /* onglet isolé */ }
     };
-    const CLE = 'trop:debut', CLE_MINUTES = 'trop:minutes', CLE_PRESENCE = 'trop:presence';
+    const CLE = 'trop:debut', CLE_PRESENCE = 'trop:presence', CLE_DEFILE = 'trop:defile';
     const lireDebut = () => Number(lire(CLE)) || 0;
-    const minuteCourante = () => Math.floor(Date.now() / 60000);
     const trancheCourante = () => Math.floor(Date.now() / (TRANCHE_S * 1000));
-    const TRANCHES_FENETRE = FENETRE_PRESENCE_MIN * 60 / TRANCHE_S;
-    const SEUIL_TRANCHES = SEUIL_PRESENCE_MIN * 60 / TRANCHE_S;
-    // Liste d'unités (minutes ou tranches) encore dans la fenêtre glissante
-    const lireListe = (cle, courant, fenetre) => {
+    const TRANCHES_FENETRE = FENETRE_MIN * 60 / TRANCHE_S;
+    const BUDGET_S = BUDGET_MIN * 60;
+    // Tranches encore dans la fenêtre glissante
+    const lireListe = cle => {
         let m;
         try { m = JSON.parse(lire(cle) || '[]'); } catch (e) { m = []; }
-        return Array.isArray(m) ? m.filter(x => x >= courant - fenetre + 1) : [];
+        const debutFenetre = trancheCourante() - TRANCHES_FENETRE + 1;
+        return Array.isArray(m) ? m.filter(x => x >= debutFenetre) : [];
     };
-    const lireMinutes = () => lireListe(CLE_MINUTES, minuteCourante(), FENETRE_MIN);
-    const lirePresence = () => lireListe(CLE_PRESENCE, trancheCourante(), TRANCHES_FENETRE);
-
-    // --- Mesure d'activité --------------------------------------------------------
-    // On OBSERVE les requêtes (PerformanceObserver) sans intercepter fetch ni XHR :
-    // rien de X n'est modifié, aucun conflit possible avec Minimal Twitter.
-    // Une minute ne compte qu'une fois, quel que soit le nombre d'onglets ou de
-    // requêtes : on mesure du temps passé, pas du volume.
-    let enCours = false;        // une séquence tourne dans cet onglet
-    let dernierGeste = -Infinity;
-    const noterGeste = () => {
-        if (document.visibilityState === 'visible') dernierGeste = performance.now();
-    };
-    ['wheel', 'scroll', 'keydown', 'pointerdown', 'touchmove'].forEach(t =>
-        window.addEventListener(t, noterGeste, {capture: true, passive: true}));
-
-    const motif = REQUETES_POSTS[location.hostname];
-    function surRequetes(liste) {
-        if (document.visibilityState !== 'visible' || enCours) return;
-        const utile = liste.getEntries().some(e =>
-            (e.initiatorType === 'fetch' || e.initiatorType === 'xmlhttprequest') &&
-            (!motif || motif.test(e.name)) &&
-            e.startTime >= dernierGeste && e.startTime - dernierGeste <= DELAI_GESTE * 1000);
-        if (!utile) return;
-        const minutes = lireMinutes(), m = minuteCourante();
-        if (minutes.includes(m)) return;
-        minutes.push(m);
-        ecrire(CLE_MINUTES, JSON.stringify(minutes));
-        verifier();
-        majCompteur();
-    }
-    try {
-        new PerformanceObserver(surRequetes).observe({type: 'resource', buffered: true});
-    } catch (e) { /* navigateur trop ancien : jamais de déclenchement par l'activité */ }
-
-    // --- Mesure de présence -------------------------------------------------------
-    // Chaque seconde, un onglet affiché marque la tranche de TRANCHE_S s en cours ;
-    // une tranche ne compte qu'une fois, quel que soit le nombre d'onglets.
-    function noterPresence() {
-        if (document.visibilityState !== 'visible' || enCours) return;
-        const tranches = lirePresence(), t = trancheCourante();
+    const marquer = cle => {
+        const tranches = lireListe(cle), t = trancheCourante();
         if (tranches.includes(t)) return;
         tranches.push(t);
-        ecrire(CLE_PRESENCE, JSON.stringify(tranches));
+        ecrire(cle, JSON.stringify(tranches));
+    };
+    // Secondes consommées : regard (une par seconde) et surcoût du défilement
+    function consommation() {
+        const presence = lireListe(CLE_PRESENCE), defile = lireListe(CLE_DEFILE);
+        return {presence, defile, regard: presence.length * TRANCHE_S,
+                surcout: defile.length * TRANCHE_S * (COUT_DEFILEMENT - 1)};
+    }
+
+    // --- Mesure -------------------------------------------------------------------
+    // Chaque seconde, un onglet affiché marque la tranche de TRANCHE_S s en cours ;
+    // un défilement la marque en plus comme « défilée ». Une tranche ne compte
+    // qu'une fois, quel que soit le nombre d'onglets. Rien de X n'est intercepté.
+    let enCours = false;        // une séquence tourne dans cet onglet
+    let derniereDefilee = -1;   // évite de relire le stockage à chaque cran de molette
+    let dernierGeste = -Infinity;
+    const regarde = () => document.visibilityState === 'visible' && !enCours;
+    function noterDefilement() {
+        if (!regarde() || trancheCourante() === derniereDefilee) return;
+        derniereDefilee = trancheCourante();
+        marquer(CLE_PRESENCE);
+        marquer(CLE_DEFILE);
+        majCompteur();
+    }
+    ['wheel', 'touchmove'].forEach(t =>
+        window.addEventListener(t, noterDefilement, {capture: true, passive: true}));
+    // Clavier (espace, j/k, flèches) ou ascenseur : le « scroll » qui suit est
+    // bien un défilement de l'utilisateur, pas un repositionnement fait par X.
+    ['keydown', 'pointerdown'].forEach(t =>
+        window.addEventListener(t, () => { dernierGeste = performance.now(); }, {capture: true, passive: true}));
+    window.addEventListener('scroll', () => {
+        if (performance.now() - dernierGeste < 1000) noterDefilement();
+    }, {capture: true, passive: true});
+    function noterPresence() {
+        if (regarde()) marquer(CLE_PRESENCE);
     }
 
     // --- Déclenchement synchronisé ----------------------------------------------------
-    // - une séquence est en cours (moins de 20 s) : l'onglet la rejoint, calé sur
-    //   la même horloge, et affiche exactement la même image ;
-    // - un des deux seuils (activité ou présence) est atteint : l'onglet VISIBLE en
-    //   lance une nouvelle, remet les deux compteurs à zéro, et l'événement
-    //   « storage » fait démarrer tous les autres onglets au même instant.
+    // - une séquence est en cours : l'onglet la rejoint, calé sur la même horloge,
+    //   et affiche exactement la même image ;
+    // - le budget est épuisé : l'onglet VISIBLE en lance une nouvelle, remet les
+    //   compteurs à zéro, et l'événement « storage » fait démarrer tous les autres
+    //   onglets au même instant.
 
     function verifier() {
         const html = document.documentElement;
@@ -142,11 +130,11 @@
         let debut = lireDebut();
         const maintenant = Date.now();
         if (maintenant - debut >= T_FIN * 1000) {
-            const trop = lireMinutes().length >= SEUIL_MIN || lirePresence().length >= SEUIL_TRANCHES;
-            if (document.visibilityState !== 'visible' || !trop) return;
+            const {regard, surcout} = consommation();
+            if (document.visibilityState !== 'visible' || regard + surcout < BUDGET_S) return;
             debut = maintenant;
-            ecrire(CLE_MINUTES, '[]');
             ecrire(CLE_PRESENCE, '[]');
+            ecrire(CLE_DEFILE, '[]');
             ecrire(CLE, String(debut));
         }
         enCours = true;
@@ -163,26 +151,28 @@
     } catch (e) { /* pas d'API FontFace : la pile de repli prend le relais */ }
 
     // --- Compte à rebours ------------------------------------------------------------
-    // En haut à droite : le temps minimal avant le prochain TROP si l'on continue
-    // sans s'arrêter, pour chacun des deux seuils. C'est la première unité U (minute
-    // ou tranche) dont la fenêtre glissante contiendrait le seuil, en comptant les
-    // unités déjà comptées encore dans la fenêtre, plus toutes celles d'ici U.
-    // Une pause le fait remonter.
-    function attente(liste, courant, fenetre, seuil, dureeMs) {
-        const dejaCompte = liste.includes(courant) ? 1 : 0;
-        for (let u = courant; ; u++) {
-            const gardees = liste.filter(x => x >= u - fenetre + 1).length;
-            if (gardees + u - courant + 1 - dejaCompte >= seuil) {
-                return Math.max(0, Math.ceil((u * dureeMs - Date.now()) / 1000));
+    // En haut à droite : le temps avant le prochain TROP si l'on reste à regarder
+    // sans défiler, c'est-à-dire la première tranche U où la fenêtre glissante
+    // dépasserait le budget (tranches déjà consommées encore dans la fenêtre, plus
+    // toutes celles d'ici U). Défiler le fait fondre trois fois plus vite ; une
+    // pause le fait remonter, comme les tranches qui sortent de la fenêtre.
+    function secondesAvantTrop({presence, defile}) {
+        const c = trancheCourante();
+        const cout = x => TRANCHE_S * (defile.includes(x) ? COUT_DEFILEMENT : 1);
+        const aVenir = presence.includes(c) ? 0 : 1;
+        for (let u = c; ; u++) {
+            const gardees = presence.filter(x => x >= u - TRANCHES_FENETRE + 1);
+            const total = gardees.reduce((s, x) => s + cout(x), 0) + (u - c + aVenir) * TRANCHE_S;
+            if (total >= BUDGET_S) {
+                return Math.max(0, Math.ceil((u * TRANCHE_S * 1000 - Date.now()) / 1000));
             }
         }
     }
     const duree = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
-    // Un panneau, deux jauges : « défilement » (minutes actives, en cases) et
-    // « présence » (temps d'onglet affiché, en barre). Le titre donne le plus court
-    // des deux comptes à rebours, la jauge qui le fixe est en pleine lumière, et
-    // il vire au rouge dans la dernière minute.
+    // Un panneau, une jauge : la barre se remplit du temps passé à regarder (blanc)
+    // et de ce que le défilement a coûté en plus (rouge). Le voyant « ×3 » s'allume
+    // tant qu'on défile, et le titre vire au rouge dans la dernière minute.
     // Même blindage que la scène : enfant de <html>, shadow root fermé, et
     // transparent aux clics (pointer-events: none) pour ne rien gêner sur X.
     let hoteCompteur = null, ui = null;
@@ -199,20 +189,28 @@
         font-variant-numeric: tabular-nums; pointer-events: none; user-select: none;
         box-shadow: 0 2px 10px rgba(0,0,0,.25);
     }
-    .titre { font: 800 condensed 18px/1.2 ${POLICE}; letter-spacing: .04em; transition: color .3s; }
-    .titre.urgent { color: #ff453a; }
-    .ligne {
-        display: grid; grid-template-columns: 62px 1fr 64px; align-items: center; gap: 6px;
-        margin-top: 4px; font: 600 11px/1.3 -apple-system, system-ui, sans-serif;
-        opacity: .5; transition: opacity .3s;
+    .tete { display: flex; align-items: center; justify-content: space-between; }
+    .titre {
+        font: 800 condensed 18px/1.2 ${POLICE}; letter-spacing: .04em; white-space: nowrap;
+        transition: color .3s;
     }
-    .ligne.proche { opacity: 1; }
-    .valeur { text-align: right; white-space: nowrap; }
-    .jauge { display: flex; gap: 2px; height: 6px; }
-    .case, .barre { flex: 1; border-radius: 2px; background: rgba(255,255,255,.22); }
-    .case.pleine { background: #fff; }
-    .barre { position: relative; overflow: hidden; }
-    .rempli { position: absolute; left: 0; top: 0; bottom: 0; background: #fff; }
+    .titre.urgent, .detail b { color: #ff453a; }
+    .voyant {
+        font: 800 condensed 13px/1 ${POLICE}; padding: 3px 6px; border-radius: 4px;
+        background: rgba(255,255,255,.12); color: rgba(255,255,255,.35); transition: all .2s;
+    }
+    .voyant.actif { background: #ff453a; color: #fff; }
+    .barre {
+        position: relative; height: 6px; margin-top: 5px; border-radius: 3px;
+        overflow: hidden; background: rgba(255,255,255,.22);
+    }
+    .regard, .surcout { position: absolute; top: 0; bottom: 0; transition: width .3s, left .3s; }
+    .regard { left: 0; background: #fff; }
+    .surcout { background: #ff453a; }
+    .detail {
+        display: flex; justify-content: space-between; margin-top: 4px; white-space: nowrap;
+        font: 600 11px/1.3 -apple-system, system-ui, sans-serif; color: rgba(255,255,255,.7);
+    }
     `;
             try {
                 const feuille = new CSSStyleSheet();
@@ -224,45 +222,43 @@
                 racine.appendChild(style);
             }
             // Construction au DOM, sans innerHTML (Trusted Types de x.com)
-            const el = (classe, parent, texte) => {
-                const n = document.createElement('div');
+            const el = (classe, parent, texte, balise = 'div') => {
+                const n = document.createElement(balise);
                 n.className = classe;
                 if (texte) n.textContent = texte;
                 parent.appendChild(n);
                 return n;
             };
             const panneau = el('panneau', racine);
-            const titre = el('titre', panneau);
-            const ligne = nom => {
-                const l = el('ligne', panneau);
-                el('nom', l, nom);
-                return {l, jauge: el('jauge', l), valeur: el('valeur', l)};
-            };
-            const def = ligne('défilement'), pres = ligne('présence');
-            const cases = Array.from({length: SEUIL_MIN}, () => el('case', def.jauge));
-            const rempli = el('rempli', el('barre', pres.jauge));
-            ui = {titre, def, pres, cases, rempli};
+            const tete = el('tete', panneau);
+            const titre = el('titre', tete);
+            const voyant = el('voyant', tete, `×${COUT_DEFILEMENT}`);
+            const barre = el('barre', panneau);
+            const regard = el('regard', barre), surcout = el('surcout', barre);
+            const detail = el('detail', panneau);
+            const total = el('', detail, '', 'span');
+            const perdu = el('', detail, '', 'b');
+            ui = {titre, voyant, regard, surcout, total, perdu};
         }
         // X peut remplacer le contenu de <html> : on se replace au besoin
         if (hoteCompteur.parentNode !== html) html.appendChild(hoteCompteur);
         hoteCompteur.style.setProperty('display', enCours ? 'none' : 'block', 'important');
         if (enCours) return;
 
-        const minutes = lireMinutes(), tranches = lirePresence();
-        const sDef = attente(minutes, minuteCourante(), FENETRE_MIN, SEUIL_MIN, 60000);
-        const sPres = attente(tranches, trancheCourante(), TRANCHES_FENETRE, SEUIL_TRANCHES, TRANCHE_S * 1000);
-        const s = Math.min(sDef, sPres);
+        const conso = consommation();
+        const s = secondesAvantTrop(conso);
         ui.titre.textContent = `${MOT} dans ${duree(s)}`;
         ui.titre.classList.toggle('urgent', s < 60);
-        ui.def.l.classList.toggle('proche', sDef <= sPres);
-        ui.pres.l.classList.toggle('proche', sPres < sDef);
+        const c = trancheCourante();
+        ui.voyant.classList.toggle('actif', conso.defile.includes(c) || conso.defile.includes(c - 1));
 
-        const n = Math.min(minutes.length, SEUIL_MIN);
-        ui.cases.forEach((c, i) => c.classList.toggle('pleine', i < n));
-        ui.def.valeur.textContent = `${n} / ${SEUIL_MIN} min`;
-        const vu = Math.min(tranches.length * TRANCHE_S, SEUIL_PRESENCE_MIN * 60);
-        ui.rempli.style.width = (100 * vu / (SEUIL_PRESENCE_MIN * 60)) + '%';
-        ui.pres.valeur.textContent = `${Math.floor(vu / 60)} / ${SEUIL_PRESENCE_MIN} min`;
+        const regard = Math.min(conso.regard, BUDGET_S);
+        const surcout = Math.min(conso.surcout, BUDGET_S - regard);
+        ui.regard.style.width = (100 * regard / BUDGET_S) + '%';
+        ui.surcout.style.left = ui.regard.style.width;
+        ui.surcout.style.width = (100 * surcout / BUDGET_S) + '%';
+        ui.total.textContent = `${duree(Math.min(conso.regard + conso.surcout, BUDGET_S))} / ${BUDGET_MIN}:00`;
+        ui.perdu.textContent = conso.surcout ? `−${duree(conso.surcout)} en défilant` : '';
     }
 
     // Pour certains gestionnaires, document-start tombe avant même que <html>
@@ -276,7 +272,7 @@
     }).observe(document, {childList: true});
     addEventListener('storage', e => {
         if (e.key === CLE) verifier();
-        if (e.key === CLE || e.key === CLE_MINUTES || e.key === CLE_PRESENCE) majCompteur();
+        if (e.key === CLE || e.key === CLE_PRESENCE || e.key === CLE_DEFILE) majCompteur();
     });
     document.addEventListener('visibilitychange', toutVerifier);
     setInterval(toutVerifier, 1000);
@@ -481,7 +477,7 @@
                     eclats.push({
                         el: e, ux: dx / lg, uy: dy / lg, cx, cy,
                         ecart: hasard(1, 2.5) * (k + 1) / 2,
-                        retard: hasard(0, 0.55) + (1 - cy / h) * 0.35,
+                        retard: hasard(0, 0.35) + (1 - cy / h) * 0.25,
                         vx: dx / lg * hasard(40, 160) + hasard(-40, 40),
                         vy: -hasard(40, 260),
                         vz: hasard(-1, 1),
@@ -549,7 +545,7 @@
             // puis un reste de nervosité pendant les fissures
             let force = 0;
             if (t < T_COEUR + 0.3) force = 2 + 9 * borne(t / T_COEUR) + 14 * p + (t < T_ENTREE ? 10 : 0);
-            else if (t < T_CHUTE) force = 1.2;
+            else if (t < T_FONDU) force = 1.2;
             if (nouvelleImage) {
                 secousseMot = {x: hasard(-1, 1) * force, y: hasard(-1, 1) * force, r: hasard(-1, 1) * force * 0.05};
                 secousse.forEach(s => { s.x = hasard(-1, 1) * force * 0.35; s.y = hasard(-1, 1) * force * 0.35; });
@@ -590,7 +586,7 @@
 
                 const vieFissure = t - tFissure;
                 l.eclats.forEach(e => {
-                    const tc = t - T_CHUTE - i * 0.12 - e.retard;
+                    const tc = t - tFissure - T_AVANT_CHUTE - e.retard;
                     if (tc <= 0) {
                         // Avant la chute : les éclats s'écartent à peine, la lettre se disjoint
                         const ecart = e.ecart * borne(vieFissure / 0.5);
@@ -604,7 +600,8 @@
                         `translate3d(${x}px, ${y}px, ${e.vz * 120 * tc}px) rotateX(${e.rx * tc}deg) rotateZ(${e.rz * tc}deg)`;
                 });
                 // Les traits de fissure s'effacent quand les morceaux se détachent
-                if (l.svg && t > T_CHUTE) l.svg.style.opacity = String(1 - borne((t - T_CHUTE) / 0.15));
+                const tChute = tFissure + T_AVANT_CHUTE;
+                if (l.svg && t > tChute) l.svg.style.opacity = String(1 - borne((t - tChute) / 0.15));
             });
 
             // Fondu final : le noir se retire et la page réapparaît

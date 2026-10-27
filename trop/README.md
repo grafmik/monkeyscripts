@@ -1,13 +1,11 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (7 minutes de défilement actif sur les 10 dernières, ou
-20 minutes passées sur X dans la dernière heure), en
-même temps sur tous les onglets X : la page est **bloquée 20
-secondes** et le mot
-**TROP** envahit l'écran, en blanc sur noir, sur toute la largeur. Il bat comme
-un cœur qui s'emballe, se fissure, tombe en morceaux, puis la page réapparaît
-et on reprend la main.
+passé trop de temps** (20 minutes dans la dernière heure, et défiler les
+consomme trois fois plus vite), en même temps sur tous les onglets X : la page
+est **bloquée 45 secondes** et le mot **TROP** envahit l'écran, en blanc sur
+noir, sur toute la largeur. Il bat comme un cœur qui s'emballe, puis se brise
+lettre par lettre, et la page réapparaît.
 
 ## Installation
 
@@ -16,19 +14,21 @@ ouvrir directement
 [le script brut](https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js).
 Actif sur `x.com`, `twitter.com` et `mobile.x.com`.
 
-## Déroulé (20 s)
+## Déroulé (45 s)
 
 | Temps | Ce qui se passe |
 | --- | --- |
 | 0 → 0,9 s | Les lettres surgissent du fond l'une après l'autre, avec un léger rebond |
-| 0,9 → 10 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
-| 10 → 12,4 s | Les lettres se fendent une à une (T, R, O, P) : choc, fissures noires qui partent du point d'impact, morceaux qui se disjoignent |
-| 12,4 → 16 s | Les éclats se détachent et tombent en tournoyant en 3D |
-| 16,2 → 20 s | Le noir s'efface, la page apparaît en fondu |
-| 20 s | Clavier, souris et défilement sont rendus |
+| 0,9 → 20 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
+| 20 s | Le T se fend : choc, fissures noires qui partent du point d'impact. 1,2 s plus tard, ses éclats tombent en tournoyant en 3D (~3 s en tout) |
+| 23 → 26 s | Pause : « ROP » reste seul, il frémit |
+| 26 s, 32 s, 38 s | Même chose pour R, puis O, puis P : 3 s de bris, 3 s de pause |
+| 41 → 44,8 s | Le noir s'efface, la page apparaît en fondu |
+| 44,8 s | Clavier, souris et défilement sont rendus |
 
 Tout se règle dans les constantes en tête de script (`MOT`, `T_FISSURE`,
-`T_CHUTE`, `T_FIN`, `BPM_DEBUT`…).
+`DUREE_BRIS`, `PAUSE_LETTRES`, `T_AVANT_CHUTE`, `BPM_DEBUT`…) ; la fin et le
+fondu se recalculent tout seuls.
 
 ## La fonte
 
@@ -41,7 +41,7 @@ Futura, il se rabat sur Impact.
 La police n'est pas téléchargée : x.com interdit les polices externes (CSP
 `font-src`), alors qu'une police locale (`local()`) ne passe pas par le réseau.
 
-## Ce qui est bloqué pendant 20 s
+## Ce qui est bloqué pendant la séquence
 
 - clavier (y compris les raccourcis de X et du navigateur que la page peut
   intercepter : espace, flèches, F5…), souris, molette, tactile, clic droit,
@@ -56,77 +56,57 @@ très bien comme ça.
 
 ## Quand ça se déclenche
 
-Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. Deux
-seuils, le premier atteint déclenche :
+Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. On dispose
+d'un **budget de 20 minutes sur l'heure glissante** :
 
-- **défilement** : **7 minutes actives sur les 10 dernières** (détaillé
-  ci-dessous) ;
-- **présence** : **20 minutes d'onglet X affiché sur la dernière heure
-  glissante**, qu'on défile ou non.
+- chaque seconde passée **à regarder** X (onglet au premier plan, fenêtre non
+  réduite) en coûte **une** ;
+- chaque seconde passée **à défiler** en coûte **trois** : défiler fait fondre
+  le temps restant trois fois plus vite. En défilant sans arrêt, le budget
+  tient donc ~6 min 40.
 
-Après un TROP, **les deux compteurs repartent de zéro**.
+Budget épuisé → TROP, et **tout repart de zéro**.
 
-### Défilement
+Le temps est mesuré par tranches de 10 s : chaque seconde, un onglet X affiché
+marque la tranche en cours ; molette, tactile, ou un défilement juste après
+une touche (espace, j/k, flèches) ou un clic (ascenseur) la marque en plus
+comme « défilée ». Une tranche ne compte qu'une fois, même avec plusieurs
+onglets. Les repositionnements faits par X lui-même ne comptent pas comme du
+défilement, les secondes de la séquence TROP ne comptent pas du tout.
+Précision : ±10 s par coup d'œil (un regard de 2 s compte une tranche entière).
 
-Une minute est **active** si, pendant cette minute, l'onglet X est affiché et X
-a **chargé de nouveaux posts dans les 30 s suivant un geste** (défilement, clic,
-touche, tactile). Les rafraîchissements automatiques de X en arrière-plan ne
-comptent pas, et une minute ne compte qu'une fois quel que soit le nombre
-d'onglets ou de requêtes : on mesure du temps passé, pas du volume.
-
-Les chargements de posts sont repérés par leur URL (requêtes GraphQL de X dont
-l'opération se termine par `Timeline`, ou `TweetDetail`, `UserTweets`…) grâce à
-un `PerformanceObserver`, qui **observe** les requêtes sans intercepter `fetch`
-ni `XHR` : rien de X n'est modifié. Le motif est dans la constante
-`REQUETES_POSTS` ; si X renomme ses opérations, c'est là qu'il faut ajuster.
-Sur un site sans motif, toute requête `fetch`/`XHR` compte.
-
-### Présence
-
-Chaque seconde, un onglet X affiché (onglet au premier plan, fenêtre non
-réduite) marque la tranche de 10 s en cours. Une tranche ne compte qu'une fois,
-même avec plusieurs onglets ; 20 minutes = 120 tranches dans les 60 dernières
-minutes. Les secondes pendant la séquence TROP ne comptent pas. Précision :
-±10 s par coup d'œil (un regard de 2 s compte une tranche entière).
-
-Réglages : `SEUIL_PRESENCE_MIN`, `FENETRE_PRESENCE_MIN`, `TRANCHE_S`.
+Réglages : `BUDGET_MIN`, `FENETRE_MIN`, `COUT_DEFILEMENT`, `TRANCHE_S`.
 
 ### Partage entre onglets
 
 Les compteurs et l'heure de la dernière séquence sont partagés entre les onglets
-du site (`localStorage`, clés `trop:minutes`, `trop:presence` et `trop:debut`) :
+du site (`localStorage`, clés `trop:presence`, `trop:defile` et `trop:debut`) :
 
-- quand le seuil est atteint, l'onglet affiché lance la séquence, remet le
-  compteur à zéro, et tous les autres onglets X démarrent au même instant, sur
+- quand le budget est épuisé, l'onglet affiché lance la séquence, remet les
+  compteurs à zéro, et tous les autres onglets X démarrent au même instant, sur
   la même horloge : changer d'onglet n'y échappe pas ;
-- un onglet ouvert pendant une séquence la rejoint là où elle en est ;
-- après un TROP, il faut de nouveau 7 minutes actives ou 20 minutes de
-  présence pour le suivant.
-
-Réglages : `SEUIL_MIN`, `FENETRE_MIN`, `DELAI_GESTE` en tête de script.
+- un onglet ouvert pendant une séquence la rejoint là où elle en est.
 
 ## Le panneau en haut à droite
 
 ```
-TROP dans 3:06
-défilement  ■■■□□□□     3 / 7 min
-présence    ▬▬▬▬▬▬───  12 / 20 min
+TROP dans 4:25                  [×3]
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬────────────
+15:30 / 20:00       −5:20 en défilant
 ```
 
 Mis à jour chaque seconde, dans tous les onglets :
 
-- **le titre** donne le temps **minimal** avant le prochain TROP si l'on
-  continue sans s'arrêter : le plus court des deux comptes à rebours. Il
-  passe **au rouge dans la dernière minute** ;
-- **défilement** : une case par minute active, sur les 7 du seuil ;
-- **présence** : une barre qui se remplit jusqu'aux 20 minutes ;
-- la jauge qui fixe le compte à rebours est en pleine lumière, l'autre est
-  atténuée.
+- **le titre** : le temps restant si l'on continue à regarder sans défiler.
+  Il passe **au rouge dans la dernière minute** ;
+- **le voyant ×3** s'allume en rouge tant qu'on défile : le compte à rebours
+  perd alors 3 s par seconde (20 s d'un coup à chaque nouvelle tranche) ;
+- **la barre** se remplit du temps passé à regarder (blanc) et de ce que le
+  défilement a coûté en plus (rouge) ;
+- dessous : le budget consommé, et ce qui a été perdu à défiler.
 
-Le compte ne descend pas forcément jusqu'à zéro : une pause le fait remonter
-(la minute ou les secondes ne sont pas comptées), comme les vieilles minutes
-qui sortent de la fenêtre. À `0:00` côté défilement, c'est le prochain
-chargement de posts qui déclenche TROP ; côté présence, il part tout seul.
+Une pause fait remonter le compte, comme les vieilles tranches qui sortent de
+la fenêtre d'une heure.
 
 Le panneau laisse passer les clics (`pointer-events: none`), vit dans un shadow
 root fermé comme la scène, et disparaît pendant la séquence.
@@ -181,19 +161,16 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 
 - pendant la séquence : 0 touche, 0 clic, 0 défilement parviennent à la page ;
   rien n'est saisi dans le champ ;
-- fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
+- (v3) fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
   clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
   leur état d'origine ;
-- mesure d'activité : rien à l'arrivée ; un chargement sans geste préalable ou
-  dans un onglet caché n'est pas compté ; geste puis chargement → la minute est
-  comptée ; 6 minutes actives → rien, 7 → TROP simultané sur 2 onglets et
-  compteur remis à zéro ; le motif d'URL reconnaît `HomeTimeline`,
-  `TweetDetail`, `UserTweetsAndReplies`… et ignore `Viewer`, `badge_count` ;
-- présence (v3.2, Chrome, page locale) : un onglet affiché ajoute une tranche
-  par 10 s ; à la 120e tranche, TROP part sans aucun défilement et les deux
-  compteurs sont remis à zéro ; le panneau affiche les deux jauges, passe au
-  rouge sous la minute et disparaît pendant la séquence ;
-- captures à chaque étape (entrée, battements, fissures, chute, fondu), en
+- budget (v4, Chrome, page locale) : un onglet affiché consomme 10 s par
+  tranche, un coup de molette 20 s de plus ; à 1 190 s rien ne se passe, un coup
+  de molette fait passer à 1 210 s → TROP, compteurs remis à zéro ; le compte
+  à rebours perd 20 s au premier défilement (4:48 → 4:25 en 3 s) ;
+- bris lettre par lettre (v4) : à 21,6 s le T tombe, à 24,5 s « ROP » est
+  intact (pause), à 39,6 s le P tombe ; page rendue à 44,8 s ;
+- (v3) captures à chaque étape (entrée, battements, fissures, chute, fondu), en
   1440 × 900 et en portrait 390 × 844 : le mot tient dans la largeur.
 
 Pas pu être vérifié ici : le rendu avec la vraie Futura (absente de Linux ; le
