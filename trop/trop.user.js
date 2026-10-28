@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.0.0
+// @version     4.1.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 20 minutes sur x.com dans l'heure (défiler les consomme 3 fois plus vite), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 20 minutes sur x.com dans l'heure (défiler les consomme 6 fois plus vite), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -26,7 +26,7 @@
     // en coûte COUT_DEFILEMENT. Mesuré par tranches de TRANCHE_S secondes.
     const FENETRE_MIN = 60;
     const BUDGET_MIN = 20;
-    const COUT_DEFILEMENT = 3;
+    const COUT_DEFILEMENT = 6;
     const TRANCHE_S = 10;
     // Chronologie, en secondes depuis le début de la séquence
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
@@ -154,7 +154,7 @@
     // En haut à droite : le temps avant le prochain TROP si l'on reste à regarder
     // sans défiler, c'est-à-dire la première tranche U où la fenêtre glissante
     // dépasserait le budget (tranches déjà consommées encore dans la fenêtre, plus
-    // toutes celles d'ici U). Défiler le fait fondre trois fois plus vite ; une
+    // toutes celles d'ici U). Défiler le fait fondre six fois plus vite ; une
     // pause le fait remonter, comme les tranches qui sortent de la fenêtre.
     function secondesAvantTrop({presence, defile}) {
         const c = trancheCourante();
@@ -171,7 +171,7 @@
     const duree = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 
     // Un panneau, une jauge : la barre se remplit du temps passé à regarder (blanc)
-    // et de ce que le défilement a coûté en plus (rouge). Le voyant « ×3 » s'allume
+    // et de ce que le défilement a coûté en plus (rouge). Le voyant « ×6 » s'allume
     // tant qu'on défile, et le titre vire au rouge dans la dernière minute.
     // Même blindage que la scène : enfant de <html>, shadow root fermé, et
     // transparent aux clics (pointer-events: none) pour ne rien gêner sur X.

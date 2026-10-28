@@ -2,7 +2,7 @@
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (20 minutes dans la dernière heure, et défiler les
-consomme trois fois plus vite), en même temps sur tous les onglets X : la page
+consomme six fois plus vite), en même temps sur tous les onglets X : la page
 est **bloquée 45 secondes** et le mot **TROP** envahit l'écran, en blanc sur
 noir, sur toute la largeur. Il bat comme un cœur qui s'emballe, puis se brise
 lettre par lettre, et la page réapparaît.
@@ -61,9 +61,9 @@ d'un **budget de 20 minutes sur l'heure glissante** :
 
 - chaque seconde passée **à regarder** X (onglet au premier plan, fenêtre non
   réduite) en coûte **une** ;
-- chaque seconde passée **à défiler** en coûte **trois** : défiler fait fondre
-  le temps restant trois fois plus vite. En défilant sans arrêt, le budget
-  tient donc ~6 min 40.
+- chaque seconde passée **à défiler** en coûte **six** : défiler fait fondre
+  le temps restant six fois plus vite. En défilant sans arrêt, le budget
+  tient donc ~3 min 20.
 
 Budget épuisé → TROP, et **tout repart de zéro**.
 
@@ -90,7 +90,7 @@ du site (`localStorage`, clés `trop:presence`, `trop:defile` et `trop:debut`) :
 ## Le panneau en haut à droite
 
 ```
-TROP dans 4:25                  [×3]
+TROP dans 4:25                  [×6]
 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬────────────
 15:30 / 20:00       −5:20 en défilant
 ```
@@ -99,8 +99,8 @@ Mis à jour chaque seconde, dans tous les onglets :
 
 - **le titre** : le temps restant si l'on continue à regarder sans défiler.
   Il passe **au rouge dans la dernière minute** ;
-- **le voyant ×3** s'allume en rouge tant qu'on défile : le compte à rebours
-  perd alors 3 s par seconde (20 s d'un coup à chaque nouvelle tranche) ;
+- **le voyant ×6** s'allume en rouge tant qu'on défile : le compte à rebours
+  perd alors 6 s par seconde (50 s d'un coup à chaque nouvelle tranche) ;
 - **la barre** se remplit du temps passé à regarder (blanc) et de ce que le
   défilement a coûté en plus (rouge) ;
 - dessous : le budget consommé, et ce qui a été perdu à défiler.
@@ -164,10 +164,11 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 - (v3) fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
   clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
   leur état d'origine ;
-- budget (v4, Chrome, page locale) : un onglet affiché consomme 10 s par
-  tranche, un coup de molette 20 s de plus ; à 1 190 s rien ne se passe, un coup
-  de molette fait passer à 1 210 s → TROP, compteurs remis à zéro ; le compte
-  à rebours perd 20 s au premier défilement (4:48 → 4:25 en 3 s) ;
+- budget (mesuré en v4 avec ×3 ; recalculé pour le ×6 de v4.1, non rejoué en
+  navigateur) : un onglet affiché consomme 10 s par tranche, un coup de molette
+  50 s de plus ; à 1 190 s rien ne se passe, un coup de molette fait passer à
+  1 240 s → TROP, compteurs remis à zéro ; le compte à rebours perd 50 s au
+  premier défilement ;
 - bris lettre par lettre (v4) : à 21,6 s le T tombe, à 24,5 s « ROP » est
   intact (pause), à 39,6 s le P tombe ; page rendue à 44,8 s ;
 - (v3) captures à chaque étape (entrée, battements, fissures, chute, fondu), en
