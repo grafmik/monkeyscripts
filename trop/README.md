@@ -48,7 +48,8 @@ La police n'est pas téléchargée : x.com interdit les polices externes (CSP
   sélection ;
 - le défilement de la page ;
 - le focus : le `<body>` est rendu `inert`, rien ne peut recevoir de saisie ;
-- les vidéos : celles que X lance toutes seules sont remises en pause.
+- les vidéos : celle en cours de lecture est stoppée dès le déclenchement, et
+  celles que X relance toutes seules sont remises en pause.
 
 Restent hors de portée d'une page web, par conception du navigateur : ⌘W,
 ⌘T, ⌘L, ⌘Q, la barre d'onglets. Fermer l'onglet reste donc possible, et c'est

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.1.0
+// @version     4.1.1
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -297,9 +297,13 @@
         const OPTIONS = {capture: true, passive: false};
         EVENEMENTS.forEach(t => window.addEventListener(t, bloquer, OPTIONS));
 
-        // X lance ses vidéos tout seul : on les remet en pause pendant la séquence
+        // X lance ses vidéos tout seul : on les remet en pause pendant la séquence.
+        // Le listener « play » rattrape toute lecture qui DÉMARRE ; mais une vidéo
+        // déjà en cours au déclenchement ne refire pas « play », donc son son
+        // continuerait derrière le noir : on met en pause tout de suite ce qui joue.
         const pasDeLecture = e => { if (e.target instanceof HTMLMediaElement) e.target.pause(); };
         document.addEventListener('play', pasDeLecture, true);
+        document.querySelectorAll('video, audio').forEach(m => { try { m.pause(); } catch (e) { /* lecture protégée */ } });
 
         const debordementAvant = html.style.getPropertyValue('overflow');
         const prioriteAvant = html.style.getPropertyPriority('overflow');
