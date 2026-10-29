@@ -1,8 +1,9 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (20 minutes dans la dernière heure, et défiler les
-consomme six fois plus vite), en même temps sur tous les onglets X : la page
+passé trop de temps** (20 minutes cumulées, défiler les consomme six fois plus
+vite, et quitter l'onglet les rend une par une), en même temps sur tous les
+onglets X : la page
 est **bloquée 45 secondes** et le mot **TROP** envahit l'écran, en blanc sur
 noir, sur toute la largeur. Il bat comme un cœur qui s'emballe, puis se brise
 lettre par lettre, et la page réapparaît.
@@ -57,35 +58,44 @@ très bien comme ça.
 
 ## Quand ça se déclenche
 
-Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. On dispose
-d'un **budget de 20 minutes sur l'heure glissante** :
+Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est une
+**jauge de 20 minutes** qui se remplit quand on regarde et se **vide quand on
+part** :
 
-- chaque seconde passée **à regarder** X (onglet au premier plan, fenêtre non
-  réduite) en coûte **une** ;
-- chaque seconde passée **à défiler** en coûte **six** : défiler fait fondre
-  le temps restant six fois plus vite. En défilant sans arrêt, le budget
-  tient donc ~3 min 20.
+- chaque seconde passée **à regarder** X (un onglet au premier plan, fenêtre non
+  réduite) la remplit d'**une** seconde ;
+- chaque seconde passée **à défiler** la remplit de **six** : défiler fait monter
+  la jauge six fois plus vite. En défilant sans arrêt, elle se remplit en
+  ~3 min 20 ;
+- dès qu'on **quitte X** (autre onglet, autre appli, fenêtre réduite), elle se
+  **vide d'une seconde par seconde**, le surcoût du défilement (rouge) d'abord,
+  jusqu'à revenir **pleinement à zéro**. Autant de temps passé ailleurs, autant
+  de temps rendu.
 
-Budget épuisé → TROP, et **tout repart de zéro**.
+Jauge pleine → TROP, et **tout repart de zéro**.
 
-Le temps est mesuré par tranches de 10 s : chaque seconde, un onglet X affiché
-marque la tranche en cours ; molette, tactile, ou un défilement juste après
-une touche (espace, j/k, flèches) ou un clic (ascenseur) la marque en plus
-comme « défilée ». Une tranche ne compte qu'une fois, même avec plusieurs
-onglets. Les repositionnements faits par X lui-même ne comptent pas comme du
-défilement, les secondes de la séquence TROP ne comptent pas du tout.
-Précision : ±10 s par coup d'œil (un regard de 2 s compte une tranche entière).
+Le solde avance seconde par seconde (lissé, sans à-coups). Un défilement, c'est
+molette, tactile, ou un défilement juste après une touche (espace, j/k, flèches)
+ou un clic (ascenseur) ; les repositionnements faits par X lui-même ne comptent
+pas, et les secondes de la séquence TROP ne comptent ni dans un sens ni dans
+l'autre (solde gelé).
 
-Réglages : `BUDGET_MIN`, `FENETRE_MIN`, `COUT_DEFILEMENT`, `TRANCHE_S`.
+Réglages : `BUDGET_MIN`, `COUT_DEFILEMENT`.
 
 ### Partage entre onglets
 
-Les compteurs et l'heure de la dernière séquence sont partagés entre les onglets
-du site (`localStorage`, clés `trop:presence`, `trop:defile` et `trop:debut`) :
+Le solde et l'heure de la dernière séquence sont partagés entre les onglets du
+site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
+`trop:defileVu` et `trop:debut`) :
 
-- quand le budget est épuisé, l'onglet affiché lance la séquence, remet les
-  compteurs à zéro, et tous les autres onglets X démarrent au même instant, sur
-  la même horloge : changer d'onglet n'y échappe pas ;
+- une **seule horloge** (`trop:maj`) fait avancer le solde : le premier onglet
+  qui s'éveille consomme le temps écoulé puis repousse l'horloge, les autres
+  voient alors un delta nul. Le temps n'est donc compté qu'une fois, quel que
+  soit le nombre d'onglets. La jauge ne se vide que lorsque **plus aucun** onglet
+  du site n'est au premier plan ;
+- quand la jauge est pleine, l'onglet affiché lance la séquence, remet le solde
+  à zéro, et tous les autres onglets X démarrent au même instant, sur la même
+  horloge : changer d'onglet n'y échappe pas ;
 - un onglet ouvert pendant une séquence la rejoint là où elle en est.
 
 ## Le panneau en haut à droite
@@ -99,15 +109,16 @@ TROP dans 4:25                  [×6]
 Mis à jour chaque seconde, dans tous les onglets :
 
 - **le titre** : le temps restant si l'on continue à regarder sans défiler.
-  Il passe **au rouge dans la dernière minute** ;
+  Il descend d'une seconde par seconde, et passe **au rouge dans la dernière
+  minute** ;
 - **le voyant ×6** s'allume en rouge tant qu'on défile : le compte à rebours
-  perd alors 6 s par seconde (50 s d'un coup à chaque nouvelle tranche) ;
+  perd alors 6 s par seconde ;
 - **la barre** se remplit du temps passé à regarder (blanc) et de ce que le
   défilement a coûté en plus (rouge) ;
 - dessous : le budget consommé, et ce qui a été perdu à défiler.
 
-Une pause fait remonter le compte, comme les vieilles tranches qui sortent de
-la fenêtre d'une heure.
+Quitter l'onglet fait **remonter** le compte d'une seconde par seconde (et
+rétrécir la barre) jusqu'à son plein.
 
 Le panneau laisse passer les clics (`pointer-events: none`), vit dans un shadow
 root fermé comme la scène, et disparaît pendant la séquence.
@@ -165,11 +176,12 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 - (v3) fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
   clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
   leur état d'origine ;
-- budget (mesuré en v4 avec ×3 ; recalculé pour le ×6 de v4.1, non rejoué en
-  navigateur) : un onglet affiché consomme 10 s par tranche, un coup de molette
-  50 s de plus ; à 1 190 s rien ne se passe, un coup de molette fait passer à
-  1 240 s → TROP, compteurs remis à zéro ; le compte à rebours perd 50 s au
-  premier défilement ;
+- jauge (v4.2 : logique simulée hors navigateur, horloge et visibilité
+  pilotées) : 300 s à regarder remplissent ~300 s ; 60 s à défiler en ajoutent
+  360 (60 + 300 de surcoût, ×6) ; en quittant l'onglet, la jauge se vide d'une
+  seconde par seconde (le surcoût d'abord) et revient à 0 ; deux « onglets » qui
+  avancent la même seconde ne la comptent qu'une fois. Le déroulé de la séquence
+  TROP lui-même n'a pas été rejoué en v4.2 (inchangé depuis v4) ;
 - bris lettre par lettre (v4) : à 21,6 s le T tombe, à 24,5 s « ROP » est
   intact (pause), à 39,6 s le P tombe ; page rendue à 44,8 s ;
 - (v3) captures à chaque étape (entrée, battements, fissures, chute, fondu), en

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.1.1
+// @version     4.2.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 20 minutes sur x.com dans l'heure (défiler les consomme 6 fois plus vite), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 20 minutes passées sur x.com (défiler les consomme 6 fois plus vite ; quitter l'onglet rend le temps, une seconde par seconde), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -21,13 +21,12 @@
 
     const MOT = 'TROP';
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
-    // Déclenchement : un budget de BUDGET_MIN minutes sur les FENETRE_MIN dernières.
-    // Chaque seconde d'onglet affiché en coûte une ; une seconde passée à défiler
-    // en coûte COUT_DEFILEMENT. Mesuré par tranches de TRANCHE_S secondes.
-    const FENETRE_MIN = 60;
+    // Déclenchement : une jauge de BUDGET_MIN minutes. Chaque seconde passée sur X
+    // (un onglet au premier plan) la remplit d'une seconde, une seconde passée à y
+    // défiler de COUT_DEFILEMENT ; dès qu'on quitte X, elle se VIDE d'une seconde
+    // par seconde jusqu'à zéro. Pleine → TROP, et tout repart de zéro.
     const BUDGET_MIN = 20;
     const COUT_DEFILEMENT = 6;
-    const TRANCHE_S = 10;
     // Chronologie, en secondes depuis le début de la séquence
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
     const T_COEUR = 19.7;       // fin des battements
@@ -64,44 +63,60 @@
         memoire[cle] = v;
         try { localStorage.setItem(cle, v); } catch (e) { /* onglet isolé */ }
     };
-    const CLE = 'trop:debut', CLE_PRESENCE = 'trop:presence', CLE_DEFILE = 'trop:defile';
-    const lireDebut = () => Number(lire(CLE)) || 0;
-    const trancheCourante = () => Math.floor(Date.now() / (TRANCHE_S * 1000));
-    const TRANCHES_FENETRE = FENETRE_MIN * 60 / TRANCHE_S;
+    const num = cle => Number(lire(cle)) || 0;
+    const CLE = 'trop:debut';
+    const CLE_BASE = 'trop:base', CLE_SURCOUT = 'trop:surcout', CLE_MAJ = 'trop:maj';
+    const CLE_VU = 'trop:vu', CLE_DEFILE_VU = 'trop:defileVu';
+    const lireDebut = () => num(CLE);
     const BUDGET_S = BUDGET_MIN * 60;
-    // Tranches encore dans la fenêtre glissante
-    const lireListe = cle => {
-        let m;
-        try { m = JSON.parse(lire(cle) || '[]'); } catch (e) { m = []; }
-        const debutFenetre = trancheCourante() - TRANCHES_FENETRE + 1;
-        return Array.isArray(m) ? m.filter(x => x >= debutFenetre) : [];
-    };
-    const marquer = cle => {
-        const tranches = lireListe(cle), t = trancheCourante();
-        if (tranches.includes(t)) return;
-        tranches.push(t);
-        ecrire(cle, JSON.stringify(tranches));
-    };
-    // Secondes consommées : regard (une par seconde) et surcoût du défilement
-    function consommation() {
-        const presence = lireListe(CLE_PRESENCE), defile = lireListe(CLE_DEFILE);
-        return {presence, defile, regard: presence.length * TRANCHE_S,
-                surcout: defile.length * TRANCHE_S * (COUT_DEFILEMENT - 1)};
+    const GRACE_MS = 1500;      // au-delà de ce silence, plus aucun onglet au premier plan
+
+    let enCours = false;        // une séquence tourne dans cet onglet
+
+    // --- Jauge partagée entre onglets --------------------------------------------
+    // Un seau de BUDGET_S secondes : CLE_BASE = temps regardé (une seconde par
+    // seconde), CLE_SURCOUT = le surcoût du défilement par-dessus. Il se remplit
+    // tant qu'un onglet du site est au premier plan (CLE_VU, rafraîchi chaque
+    // seconde par les onglets visibles) et se VIDE dès qu'on le quitte, d'une
+    // seconde par seconde, le surcoût (rouge) d'abord, jusqu'à zéro.
+    // Une seule horloge (CLE_MAJ) avance le solde : le premier onglet qui s'éveille
+    // consomme le temps écoulé puis repousse l'horloge, les autres voient alors
+    // dt ≈ 0 — rien n'est compté deux fois, quel que soit le nombre d'onglets.
+    const consommation = () => ({regard: num(CLE_BASE), surcout: num(CLE_SURCOUT)});
+
+    function avancer() {
+        const now = Date.now();
+        if (document.visibilityState === 'visible' && !enCours) ecrire(CLE_VU, String(now));
+        const maj = num(CLE_MAJ) || now;
+        let dt = (now - maj) / 1000;
+        if (dt <= 0) { ecrire(CLE_MAJ, String(now)); return; }
+        if (dt > 3600) dt = 3600;   // après une veille machine : au plus 1 h d'un coup
+        let base = num(CLE_BASE), surcout = num(CLE_SURCOUT);
+        if (enCours) {
+            // la séquence TROP ne compte ni dans un sens ni dans l'autre : solde gelé
+        } else if (now - num(CLE_VU) < GRACE_MS) {
+            base += dt;                                              // on regarde X : +1 s/s
+            if (now - num(CLE_DEFILE_VU) < GRACE_MS) surcout += dt * (COUT_DEFILEMENT - 1);
+        } else {
+            let rendre = dt;                                         // on a quitté X : −1 s/s
+            const dS = Math.min(surcout, rendre); surcout -= dS; rendre -= dS;
+            base = Math.max(0, base - rendre);
+        }
+        ecrire(CLE_BASE, String(base));
+        ecrire(CLE_SURCOUT, String(surcout));
+        ecrire(CLE_MAJ, String(now));
     }
 
-    // --- Mesure -------------------------------------------------------------------
-    // Chaque seconde, un onglet affiché marque la tranche de TRANCHE_S s en cours ;
-    // un défilement la marque en plus comme « défilée ». Une tranche ne compte
-    // qu'une fois, quel que soit le nombre d'onglets. Rien de X n'est intercepté.
-    let enCours = false;        // une séquence tourne dans cet onglet
-    let derniereDefilee = -1;   // évite de relire le stockage à chaque cran de molette
+    // --- Mesure du défilement -----------------------------------------------------
+    // Un défilement de l'utilisateur (molette, tactile, ou clavier/ascenseur juste
+    // avant) marque l'instant : tant qu'il dure, la jauge monte COUT_DEFILEMENT fois
+    // plus vite. Rien de X n'est intercepté.
     let dernierGeste = -Infinity;
-    const regarde = () => document.visibilityState === 'visible' && !enCours;
     function noterDefilement() {
-        if (!regarde() || trancheCourante() === derniereDefilee) return;
-        derniereDefilee = trancheCourante();
-        marquer(CLE_PRESENCE);
-        marquer(CLE_DEFILE);
+        if (document.visibilityState !== 'visible' || enCours) return;
+        const now = String(Date.now());
+        ecrire(CLE_VU, now);
+        ecrire(CLE_DEFILE_VU, now);
         majCompteur();
     }
     ['wheel', 'touchmove'].forEach(t =>
@@ -113,15 +128,12 @@
     window.addEventListener('scroll', () => {
         if (performance.now() - dernierGeste < 1000) noterDefilement();
     }, {capture: true, passive: true});
-    function noterPresence() {
-        if (regarde()) marquer(CLE_PRESENCE);
-    }
 
     // --- Déclenchement synchronisé ----------------------------------------------------
     // - une séquence est en cours : l'onglet la rejoint, calé sur la même horloge,
     //   et affiche exactement la même image ;
-    // - le budget est épuisé : l'onglet VISIBLE en lance une nouvelle, remet les
-    //   compteurs à zéro, et l'événement « storage » fait démarrer tous les autres
+    // - la jauge est pleine : l'onglet VISIBLE en lance une nouvelle, remet le
+    //   solde à zéro, et l'événement « storage » fait démarrer tous les autres
     //   onglets au même instant.
 
     function verifier() {
@@ -133,8 +145,9 @@
             const {regard, surcout} = consommation();
             if (document.visibilityState !== 'visible' || regard + surcout < BUDGET_S) return;
             debut = maintenant;
-            ecrire(CLE_PRESENCE, '[]');
-            ecrire(CLE_DEFILE, '[]');
+            ecrire(CLE_BASE, '0');
+            ecrire(CLE_SURCOUT, '0');
+            ecrire(CLE_MAJ, String(maintenant));
             ecrire(CLE, String(debut));
         }
         enCours = true;
@@ -152,23 +165,17 @@
 
     // --- Compte à rebours ------------------------------------------------------------
     // En haut à droite : le temps avant le prochain TROP si l'on reste à regarder
-    // sans défiler, c'est-à-dire la première tranche U où la fenêtre glissante
-    // dépasserait le budget (tranches déjà consommées encore dans la fenêtre, plus
-    // toutes celles d'ici U). Défiler le fait fondre six fois plus vite ; une
-    // pause le fait remonter, comme les tranches qui sortent de la fenêtre.
-    function secondesAvantTrop({presence, defile}) {
-        const c = trancheCourante();
-        const cout = x => TRANCHE_S * (defile.includes(x) ? COUT_DEFILEMENT : 1);
-        const aVenir = presence.includes(c) ? 0 : 1;
-        for (let u = c; ; u++) {
-            const gardees = presence.filter(x => x >= u - TRANCHES_FENETRE + 1);
-            const total = gardees.reduce((s, x) => s + cout(x), 0) + (u - c + aVenir) * TRANCHE_S;
-            if (total >= BUDGET_S) {
-                return Math.max(0, Math.ceil((u * TRANCHE_S * 1000 - Date.now()) / 1000));
-            }
-        }
+    // sans défiler, soit tout bonnement ce qui reste à remplir dans la jauge.
+    // Il descend d'une seconde par seconde quand on regarde, six fois plus vite
+    // quand on défile, et REMONTE d'une seconde par seconde quand on quitte X,
+    // jusqu'à revenir à son plein.
+    function secondesAvantTrop({regard, surcout}) {
+        return Math.max(0, BUDGET_S - regard - surcout);
     }
-    const duree = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    const duree = s => {
+        s = Math.max(0, Math.round(s));
+        return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+    };
 
     // Un panneau, une jauge : la barre se remplit du temps passé à regarder (blanc)
     // et de ce que le défilement a coûté en plus (rouge). Le voyant « ×6 » s'allume
@@ -249,8 +256,7 @@
         const s = secondesAvantTrop(conso);
         ui.titre.textContent = `${MOT} dans ${duree(s)}`;
         ui.titre.classList.toggle('urgent', s < 60);
-        const c = trancheCourante();
-        ui.voyant.classList.toggle('actif', conso.defile.includes(c) || conso.defile.includes(c - 1));
+        ui.voyant.classList.toggle('actif', Date.now() - num(CLE_DEFILE_VU) < GRACE_MS);
 
         const regard = Math.min(conso.regard, BUDGET_S);
         const surcout = Math.min(conso.surcout, BUDGET_S - regard);
@@ -258,12 +264,12 @@
         ui.surcout.style.left = ui.regard.style.width;
         ui.surcout.style.width = (100 * surcout / BUDGET_S) + '%';
         ui.total.textContent = `${duree(Math.min(conso.regard + conso.surcout, BUDGET_S))} / ${BUDGET_MIN}:00`;
-        ui.perdu.textContent = conso.surcout ? `−${duree(conso.surcout)} en défilant` : '';
+        ui.perdu.textContent = conso.surcout >= 1 ? `−${duree(conso.surcout)} en défilant` : '';
     }
 
     // Pour certains gestionnaires, document-start tombe avant même que <html>
     // existe : on attend alors sa création (aucune saisie possible entre-temps).
-    const toutVerifier = () => { noterPresence(); verifier(); majCompteur(); };
+    const toutVerifier = () => { avancer(); verifier(); majCompteur(); };
     if (document.documentElement) toutVerifier();
     else new MutationObserver((_, o) => {
         if (!document.documentElement) return;
@@ -272,7 +278,7 @@
     }).observe(document, {childList: true});
     addEventListener('storage', e => {
         if (e.key === CLE) verifier();
-        if (e.key === CLE || e.key === CLE_PRESENCE || e.key === CLE_DEFILE) majCompteur();
+        if (e.key === CLE || e.key === CLE_BASE || e.key === CLE_SURCOUT) majCompteur();
     });
     document.addEventListener('visibilitychange', toutVerifier);
     setInterval(toutVerifier, 1000);
