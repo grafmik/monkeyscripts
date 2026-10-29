@@ -1,7 +1,7 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (20 minutes cumulées, défiler les consomme six fois plus
+passé trop de temps** (20 minutes cumulées, défiler les consomme deux fois plus
 vite, et quitter l'onglet les rend une par une), en même temps sur tous les
 onglets X : la page
 est **bloquée 45 secondes** et le mot **TROP** envahit l'écran, en blanc sur
@@ -64,9 +64,9 @@ part** :
 
 - chaque seconde passée **à regarder** X (un onglet au premier plan, fenêtre non
   réduite) la remplit d'**une** seconde ;
-- chaque seconde passée **à défiler** la remplit de **six** : défiler fait monter
-  la jauge six fois plus vite. En défilant sans arrêt, elle se remplit en
-  ~3 min 20 ;
+- chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
+  la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
+  ~10 min ;
 - dès qu'on **quitte X** (autre onglet, autre appli, fenêtre réduite), elle se
   **vide d'une seconde par seconde**, le surcoût du défilement (rouge) d'abord,
   jusqu'à revenir **pleinement à zéro**. Autant de temps passé ailleurs, autant
@@ -101,7 +101,7 @@ site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
 ## Le panneau en haut à droite
 
 ```
-TROP dans 4:25                  [×6]
+TROP dans 4:25                  [×2]
 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬────────────
 15:30 / 20:00       −5:20 en défilant
 ```
@@ -111,8 +111,8 @@ Mis à jour chaque seconde, dans tous les onglets :
 - **le titre** : le temps restant si l'on continue à regarder sans défiler.
   Il descend d'une seconde par seconde, et passe **au rouge dans la dernière
   minute** ;
-- **le voyant ×6** s'allume en rouge tant qu'on défile : le compte à rebours
-  perd alors 6 s par seconde ;
+- **le voyant ×2** s'allume en rouge tant qu'on défile : le compte à rebours
+  perd alors 2 s par seconde ;
 - **la barre** se remplit du temps passé à regarder (blanc) et de ce que le
   défilement a coûté en plus (rouge) ;
 - dessous : le budget consommé, et ce qui a été perdu à défiler.
@@ -178,7 +178,7 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   leur état d'origine ;
 - jauge (v4.2 : logique simulée hors navigateur, horloge et visibilité
   pilotées) : 300 s à regarder remplissent ~300 s ; 60 s à défiler en ajoutent
-  360 (60 + 300 de surcoût, ×6) ; en quittant l'onglet, la jauge se vide d'une
+  120 (60 + 60 de surcoût, ×2) ; en quittant l'onglet, la jauge se vide d'une
   seconde par seconde (le surcoût d'abord) et revient à 0 ; deux « onglets » qui
   avancent la même seconde ne la comptent qu'une fois. Le déroulé de la séquence
   TROP lui-même n'a pas été rejoué en v4.2 (inchangé depuis v4) ;
