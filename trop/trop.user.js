@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.2.1
+// @version     4.2.2
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -73,11 +73,17 @@
 
     let enCours = false;        // une séquence tourne dans cet onglet
 
+    // « Regarder X », c'est l'onglet au premier plan ET sa fenêtre active. Le seul
+    // visibilityState ne suffit pas : changer de bureau (Space, geste à trois
+    // doigts) ou passer sur une autre appli laisse l'onglet « visible » mais fait
+    // perdre le focus à la fenêtre — document.hasFocus() le voit, pas la visibilité.
+    const auPremierPlan = () => document.visibilityState === 'visible' && document.hasFocus();
+
     // --- Jauge partagée entre onglets --------------------------------------------
     // Un seau de BUDGET_S secondes : CLE_BASE = temps regardé (une seconde par
     // seconde), CLE_SURCOUT = le surcoût du défilement par-dessus. Il se remplit
     // tant qu'un onglet du site est au premier plan (CLE_VU, rafraîchi chaque
-    // seconde par les onglets visibles) et se VIDE dès qu'on le quitte, d'une
+    // seconde par les onglets actifs) et se VIDE dès qu'on le quitte, d'une
     // seconde par seconde, le surcoût (rouge) d'abord, jusqu'à zéro.
     // Une seule horloge (CLE_MAJ) avance le solde : le premier onglet qui s'éveille
     // consomme le temps écoulé puis repousse l'horloge, les autres voient alors
@@ -86,7 +92,7 @@
 
     function avancer() {
         const now = Date.now();
-        if (document.visibilityState === 'visible' && !enCours) ecrire(CLE_VU, String(now));
+        if (auPremierPlan() && !enCours) ecrire(CLE_VU, String(now));
         const maj = num(CLE_MAJ) || now;
         let dt = (now - maj) / 1000;
         if (dt <= 0) { ecrire(CLE_MAJ, String(now)); return; }
@@ -113,7 +119,7 @@
     // plus vite. Rien de X n'est intercepté.
     let dernierGeste = -Infinity;
     function noterDefilement() {
-        if (document.visibilityState !== 'visible' || enCours) return;
+        if (!auPremierPlan() || enCours) return;
         const now = String(Date.now());
         ecrire(CLE_VU, now);
         ecrire(CLE_DEFILE_VU, now);
@@ -281,6 +287,11 @@
         if (e.key === CLE || e.key === CLE_BASE || e.key === CLE_SURCOUT) majCompteur();
     });
     document.addEventListener('visibilitychange', toutVerifier);
+    // Changer de bureau (Space) ou d'appli ne change pas la visibilité mais fait
+    // perdre/reprendre le focus : on recalcule aussitôt pour que la jauge se mette
+    // à se vider (ou à se remplir) sans attendre le tic suivant.
+    addEventListener('blur', toutVerifier);
+    addEventListener('focus', toutVerifier);
     setInterval(toutVerifier, 1000);
 
     function rituel(html, debut, surFin) {

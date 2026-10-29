@@ -62,15 +62,17 @@ Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est u
 **jauge de 20 minutes** qui se remplit quand on regarde et se **vide quand on
 part** :
 
-- chaque seconde passée **à regarder** X (un onglet au premier plan, fenêtre non
-  réduite) la remplit d'**une** seconde ;
+- chaque seconde passée **à regarder** X (onglet au premier plan **et** fenêtre
+  active) la remplit d'**une** seconde ;
 - chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
   la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
   ~10 min ;
-- dès qu'on **quitte X** (autre onglet, autre appli, fenêtre réduite), elle se
-  **vide d'une seconde par seconde**, le surcoût du défilement (rouge) d'abord,
-  jusqu'à revenir **pleinement à zéro**. Autant de temps passé ailleurs, autant
-  de temps rendu.
+- dès qu'on **quitte X**, elle se **vide d'une seconde par seconde**, le surcoût
+  du défilement (rouge) d'abord, jusqu'à revenir **pleinement à zéro**. Autant de
+  temps passé ailleurs, autant de temps rendu. « Quitter X », c'est changer
+  d'onglet, réduire la fenêtre, **changer de bureau (Space)** ou passer sur une
+  autre appli : tout ce qui fait que la fenêtre n'est plus au premier plan
+  (`visibilityState` *et* `document.hasFocus()`).
 
 Jauge pleine → TROP, et **tout repart de zéro**.
 
