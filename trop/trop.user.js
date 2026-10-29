@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.2.2
+// @version     4.3.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -27,16 +27,23 @@
     // par seconde jusqu'à zéro. Pleine → TROP, et tout repart de zéro.
     const BUDGET_MIN = 20;
     const COUT_DEFILEMENT = 2;
-    // Chronologie, en secondes depuis le début de la séquence
+    // Chronologie, en secondes depuis le début de la séquence. La durée TOTALE est
+    // fixée (DUREE_TOTALE) ; le final — le mot qui se brise lettre par lettre puis
+    // le fondu — garde son rythme, et c'est la longue montée des battements qui
+    // s'étire pour remplir le reste. Dix minutes de cœur qui bat avant que ça cède.
+    const DUREE_TOTALE = 600;   // 10 minutes en tout
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
-    const T_COEUR = 19.7;       // fin des battements
-    const T_FISSURE = 20;       // première lettre qui se fissure
     const T_AVANT_CHUTE = 1.2;  // entre la fissure d'une lettre et la chute de ses éclats
     const DUREE_BRIS = 3;       // d'une fissure à la disparition des derniers éclats
     const PAUSE_LETTRES = 3;    // silence entre deux lettres
     const ECART_FISSURE = DUREE_BRIS + PAUSE_LETTRES;
+    const DUREE_FONDU = 3.8;    // du dernier éclat à la page rendue
+    // Durée du final, de la première fissure à la page rendue : indépendante du total
+    const DUREE_FINAL = (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS + DUREE_FONDU;
+    const T_FISSURE = DUREE_TOTALE - DUREE_FINAL;   // première lettre qui se fissure
+    const T_COEUR = T_FISSURE - 0.3;                // fin des battements, juste avant
     const T_FONDU = T_FISSURE + (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS;  // le noir s'efface
-    const T_FIN = T_FONDU + 3.8;  // la page est rendue à l'utilisateur
+    const T_FIN = DUREE_TOTALE;   // la page est rendue à l'utilisateur
     const BPM_DEBUT = 58, BPM_FIN = 104;  // le cœur s'emballe
     const IMAGES_PAR_S = 24;    // le tremblement saute comme une pellicule
 

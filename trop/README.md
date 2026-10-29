@@ -4,9 +4,9 @@ X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (20 minutes cumulées, défiler les consomme deux fois plus
 vite, et quitter l'onglet les rend une par une), en même temps sur tous les
 onglets X : la page
-est **bloquée 45 secondes** et le mot **TROP** envahit l'écran, en blanc sur
-noir, sur toute la largeur. Il bat comme un cœur qui s'emballe, puis se brise
-lettre par lettre, et la page réapparaît.
+est **bloquée 10 minutes** et le mot **TROP** envahit l'écran, en blanc sur
+noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant une
+longue montée, puis se brise lettre par lettre, et la page réapparaît.
 
 ## Installation
 
@@ -15,21 +15,26 @@ ouvrir directement
 [le script brut](https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js).
 Actif sur `x.com`, `twitter.com` et `mobile.x.com`.
 
-## Déroulé (45 s)
+## Déroulé (10 min)
+
+La durée totale est fixée (`DUREE_TOTALE = 600 s`) ; le **final** garde son
+rythme (~25 s, la casse ne se fait pas au ralenti) et c'est la montée des
+battements qui s'étire pour remplir le reste — presque dix minutes de cœur qui
+bat avant que ça cède.
 
 | Temps | Ce qui se passe |
 | --- | --- |
 | 0 → 0,9 s | Les lettres surgissent du fond l'une après l'autre, avec un léger rebond |
-| 0,9 → 20 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
-| 20 s | Le T se fend : choc, fissures noires qui partent du point d'impact. 1,2 s plus tard, ses éclats tombent en tournoyant en 3D (~3 s en tout) |
-| 23 → 26 s | Pause : « ROP » reste seul, il frémit |
-| 26 s, 32 s, 38 s | Même chose pour R, puis O, puis P : 3 s de bris, 3 s de pause |
-| 41 → 44,8 s | Le noir s'efface, la page apparaît en fondu |
-| 44,8 s | Clavier, souris et défilement sont rendus |
+| 0,9 → ~575 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, montée lente sur ~9 min 35. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
+| 575 s | Le T se fend : choc, fissures noires qui partent du point d'impact. 1,2 s plus tard, ses éclats tombent en tournoyant en 3D (~3 s en tout) |
+| 578 → 581 s | Pause : « ROP » reste seul, il frémit |
+| 581 s, 587 s, 593 s | Même chose pour R, puis O, puis P : 3 s de bris, 3 s de pause |
+| 596 → 600 s | Le noir s'efface, la page apparaît en fondu |
+| 600 s | Clavier, souris et défilement sont rendus |
 
-Tout se règle dans les constantes en tête de script (`MOT`, `T_FISSURE`,
-`DUREE_BRIS`, `PAUSE_LETTRES`, `T_AVANT_CHUTE`, `BPM_DEBUT`…) ; la fin et le
-fondu se recalculent tout seuls.
+Tout se règle dans les constantes en tête de script (`MOT`, `DUREE_TOTALE`,
+`DUREE_BRIS`, `PAUSE_LETTRES`, `T_AVANT_CHUTE`, `BPM_DEBUT`…) ; `T_FISSURE`, la
+fin et le fondu se recalculent tout seuls à partir de la durée totale.
 
 ## La fonte
 
@@ -175,17 +180,22 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 
 - pendant la séquence : 0 touche, 0 clic, 0 défilement parviennent à la page ;
   rien n'est saisi dans le champ ;
-- (v3) fin mesurée à 20,8 s après la navigation (0,5 s de chargement + 20 s), puis
-  clavier, clic et défilement refonctionnent, `<html>` et `<body>` retrouvent
-  leur état d'origine ;
+- (v3, séquence de 20 s de l'époque) fin mesurée à 20,8 s après la navigation
+  (0,5 s de chargement + 20 s), puis clavier, clic et défilement refonctionnent,
+  `<html>` et `<body>` retrouvent leur état d'origine ;
+- durée totale (v4.3) : portée à 10 min (`DUREE_TOTALE = 600 s`) ; la casse et le
+  fondu gardent leur rythme (final ~25 s, de 575 s à 600 s), c'est la montée des
+  battements qui s'étire. Recalcul de la chronologie vérifié ; le rendu sur 10 min
+  réelles n'a pas été rejoué en navigateur ;
 - jauge (v4.2 : logique simulée hors navigateur, horloge et visibilité
   pilotées) : 300 s à regarder remplissent ~300 s ; 60 s à défiler en ajoutent
   120 (60 + 60 de surcoût, ×2) ; en quittant l'onglet, la jauge se vide d'une
   seconde par seconde (le surcoût d'abord) et revient à 0 ; deux « onglets » qui
   avancent la même seconde ne la comptent qu'une fois. Le déroulé de la séquence
   TROP lui-même n'a pas été rejoué en v4.2 (inchangé depuis v4) ;
-- bris lettre par lettre (v4) : à 21,6 s le T tombe, à 24,5 s « ROP » est
-  intact (pause), à 39,6 s le P tombe ; page rendue à 44,8 s ;
+- bris lettre par lettre (v4, quand la séquence durait 44,8 s) : à 21,6 s le T
+  tombe, à 24,5 s « ROP » est intact (pause), à 39,6 s le P tombe ; page rendue à
+  44,8 s. En v4.3 le même final se joue de 575 s à 600 s ;
 - (v3) captures à chaque étape (entrée, battements, fissures, chute, fondu), en
   1440 × 900 et en portrait 390 × 844 : le mot tient dans la largeur.
 
