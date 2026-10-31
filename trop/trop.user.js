@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.3.0
+// @version     4.4.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -27,20 +27,21 @@
     // par seconde jusqu'à zéro. Pleine → TROP, et tout repart de zéro.
     const BUDGET_MIN = 20;
     const COUT_DEFILEMENT = 2;
-    // Chronologie, en secondes depuis le début de la séquence. La durée TOTALE est
-    // fixée (DUREE_TOTALE) ; le final — le mot qui se brise lettre par lettre puis
-    // le fondu — garde son rythme, et c'est la longue montée des battements qui
-    // s'étire pour remplir le reste. Dix minutes de cœur qui bat avant que ça cède.
-    const DUREE_TOTALE = 600;   // 10 minutes en tout
+    // Chronologie, en secondes depuis le début de la séquence. 15 minutes en tout :
+    // ~3 min où le mot bat et tremble, puis 3 min par lettre — elle se fissure
+    // lentement, une fissure après l'autre, de plus en plus vite, jusqu'à ce que
+    // ses éclats tombent —, puis le fondu.
+    const DUREE_TOTALE = 900;   // 15 minutes en tout
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
-    const T_AVANT_CHUTE = 1.2;  // entre la fissure d'une lettre et la chute de ses éclats
-    const DUREE_BRIS = 3;       // d'une fissure à la disparition des derniers éclats
-    const PAUSE_LETTRES = 3;    // silence entre deux lettres
-    const ECART_FISSURE = DUREE_BRIS + PAUSE_LETTRES;
+    const ECART_FISSURE = 180;  // chaque lettre a 3 minutes pour se briser
+    const PAUSE_LETTRES = 3;    // silence entre la chute d'une lettre et la lettre suivante
+    const DUREE_CHUTE = 1.8;    // de la chute des éclats à leur disparition
+    const DUREE_BRIS = ECART_FISSURE - PAUSE_LETTRES;  // de la première fissure au dernier éclat
+    const T_AVANT_CHUTE = DUREE_BRIS - DUREE_CHUTE;    // la lettre se fissure pendant ~2 min 55
     const DUREE_FONDU = 3.8;    // du dernier éclat à la page rendue
-    // Durée du final, de la première fissure à la page rendue : indépendante du total
+    // Durée du final, de la première fissure à la page rendue (~12 min)
     const DUREE_FINAL = (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS + DUREE_FONDU;
-    const T_FISSURE = DUREE_TOTALE - DUREE_FINAL;   // première lettre qui se fissure
+    const T_FISSURE = DUREE_TOTALE - DUREE_FINAL;   // première lettre qui se fissure (~3 min)
     const T_COEUR = T_FISSURE - 0.3;                // fin des battements, juste avant
     const T_FONDU = T_FISSURE + (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS;  // le noir s'efface
     const T_FIN = DUREE_TOTALE;   // la page est rendue à l'utilisateur
@@ -513,14 +514,21 @@
                     });
                 }
             }
-            lettre.el.style.color = 'transparent';
+            // La lettre entière reste dessous jusqu'à la chute : elle masque les
+            // joints des éclats, qui sinon dessineraient d'avance toutes les fissures
 
-            // Les fissures, en noir, poussent depuis le point d'impact
+            // Les fissures, en noir, apparaissent une à une pendant ~3 minutes : le
+            // choc ouvre les premières depuis le point d'impact, puis chaque rayon
+            // s'allonge par tronçons et les anneaux se referment, de plus en plus
+            // vite. Chaque nouvelle fissure secoue la lettre. Tout est calé sur
+            // l'horloge t (et non sur des animations à délai) : un onglet qui
+            // rejoint la séquence en cours voit la lettre au même stade.
             const svg = document.createElementNS(SVG, 'svg');
             svg.setAttribute('width', w);
             svg.setAttribute('height', h);
             const trait = Math.max(2, taille * 0.012);
-            const tracer = (pts, delai, duree) => {
+            const segments = [];
+            const tracer = (pts, rang) => {
                 const p = document.createElementNS(SVG, 'polyline');
                 p.setAttribute('points', pts.map(q => `${q.x.toFixed(1)},${q.y.toFixed(1)}`).join(' '));
                 p.setAttribute('fill', 'none');
@@ -531,17 +539,29 @@
                 p.style.strokeDasharray = '1';
                 p.style.strokeDashoffset = '1';
                 svg.appendChild(p);
-                p.animate([{strokeDashoffset: 1}, {strokeDashoffset: 0}],
-                          {duration: duree, delay: delai, easing: 'cubic-bezier(.2,.9,.3,1)', fill: 'forwards'});
+                segments.push({p, rang});
             };
+            // Rang = ordre d'apparition : le cœur des rayons d'abord, leurs bouts
+            // ensuite (dans l'ordre, sur un même rayon), les anneaux en dernier
             for (let i = 0; i < n; i++) {
-                tracer([Q[i][0], B[i][0], Q[i][1], B[i][1], Q[i][2], B[i][2], Q[i][3]], hasard(0, 60), 700);
-                for (const k of [1, 2]) {
-                    tracer([Q[i][k], ...A[i][k], Q[(i + 1) % n][k]], 90 + k * 90 + hasard(0, 80), 260);
-                }
+                const rangs = [0, 1, 2].map(k => k * 0.3 + hasard(0, 0.35)).sort((a, b) => a - b);
+                for (let k = 0; k < 3; k++) tracer([Q[i][k], B[i][k], Q[i][k + 1]], rangs[k]);
+                for (const k of [1, 2]) tracer([Q[i][k], ...A[i][k], Q[(i + 1) % n][k]], 0.2 + 0.3 * k + hasard(0, 0.35));
             }
+            segments.sort((a, b) => a.rang - b.rang);
+            // Le choc ouvre d'un coup les premières fissures ; les autres viennent
+            // ensuite, espacées en racine carrée : rares au début, serrées à la fin
+            const IMPACT = 3, DUREE_FISSURES = T_AVANT_CHUTE - 2;
+            const N = segments.length;
+            segments.forEach((s, j) => {
+                const impact = j < IMPACT;
+                s.t0 = impact ? 0 : DUREE_FISSURES * Math.sqrt((j - IMPACT + 1) / (N - IMPACT));
+                s.duree = impact ? 0.7 : hasard(0.25, 0.6);
+                s.choc = impact ? 18 : 4 + 8 * s.t0 / DUREE_FISSURES;
+            });
             lettre.el.appendChild(svg);
             lettre.svg = svg;
+            lettre.segments = segments;
             lettre.eclats = eclats;
         }
 
@@ -571,9 +591,10 @@
 
             // Intensité du tremblement : monte avec le temps, bondit à chaque battement,
             // puis un reste de nervosité pendant les fissures
+            // (pendant le bris, la nervosité monte à mesure que la lettre se fissure)
             let force = 0;
             if (t < T_COEUR + 0.3) force = 2 + 9 * borne(t / T_COEUR) + 14 * p + (t < T_ENTREE ? 10 : 0);
-            else if (t < T_FONDU) force = 1.2;
+            else if (t < T_FONDU) force = 1.2 + 2.5 * borne(((t - T_FISSURE) % ECART_FISSURE) / T_AVANT_CHUTE);
             if (nouvelleImage) {
                 secousseMot = {x: hasard(-1, 1) * force, y: hasard(-1, 1) * force, r: hasard(-1, 1) * force * 0.05};
                 secousse.forEach(s => { s.x = hasard(-1, 1) * force * 0.35; s.y = hasard(-1, 1) * force * 0.35; });
@@ -599,25 +620,37 @@
                 const u = borne((t - i * 0.09) / (T_ENTREE - 0.27));
                 const s = t < T_ENTREE ? Math.max(0, sortieDos(u)) : 1;
                 const tFissure = T_FISSURE + i * ECART_FISSURE;
-                // Choc de l'impact au moment où la lettre se fend
-                const choc = t >= tFissure ? Math.exp(-(t - tFissure) / 0.09) : 0;
-                const cx = secousse[i].x + choc * hasard(-18, 18);
-                const cy = secousse[i].y + choc * hasard(-18, 18);
-                l.el.style.transform = `translate(${cx}px, ${cy}px) scale(${s})`;
-                l.el.style.opacity = String(borne(u * 3));
-
                 if (t >= tFissure && !l.eclats) {
                     fissuresPosees = true;
                     briser(l);
                 }
+                const vieFissure = t - tFissure;
+
+                // Les fissures s'ouvrent à leur heure ; chacune donne un choc à la lettre
+                let choc = 0, ouvertes = 0;
+                if (l.segments) {
+                    l.segments.forEach(sg => {
+                        const v = vieFissure - sg.t0;
+                        if (v < 0) return;
+                        ouvertes++;
+                        const w = borne(v / sg.duree);
+                        sg.p.style.strokeDashoffset = String(Math.pow(1 - w, 3));
+                        if (v < 0.6) choc += sg.choc * Math.exp(-v / 0.09);
+                    });
+                }
+                const cx = secousse[i].x + choc * hasard(-1, 1);
+                const cy = secousse[i].y + choc * hasard(-1, 1);
+                l.el.style.transform = `translate(${cx}px, ${cy}px) scale(${s})`;
+                l.el.style.opacity = String(borne(u * 3));
                 if (!l.eclats) return;
 
-                const vieFissure = t - tFissure;
+                // La lettre se disjoint à mesure que les fissures s'ouvrent
+                const disjoint = ouvertes / l.segments.length;
                 l.eclats.forEach(e => {
                     const tc = t - tFissure - T_AVANT_CHUTE - e.retard;
                     if (tc <= 0) {
                         // Avant la chute : les éclats s'écartent à peine, la lettre se disjoint
-                        const ecart = e.ecart * borne(vieFissure / 0.5);
+                        const ecart = e.ecart * disjoint;
                         e.el.style.transform = `translate(${e.ux * ecart}px, ${e.uy * ecart}px)`;
                         return;
                     }
@@ -629,6 +662,7 @@
                 });
                 // Les traits de fissure s'effacent quand les morceaux se détachent
                 const tChute = tFissure + T_AVANT_CHUTE;
+                l.el.style.color = t > tChute ? 'transparent' : '';
                 if (l.svg && t > tChute) l.svg.style.opacity = String(1 - borne((t - tChute) / 0.15));
             });
 

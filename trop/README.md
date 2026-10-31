@@ -4,9 +4,10 @@ X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (20 minutes cumulées, défiler les consomme deux fois plus
 vite, et quitter l'onglet les rend une par une), en même temps sur tous les
 onglets X : la page
-est **bloquée 10 minutes** et le mot **TROP** envahit l'écran, en blanc sur
-noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant une
-longue montée, puis se brise lettre par lettre, et la page réapparaît.
+est **bloquée 15 minutes** et le mot **TROP** envahit l'écran, en blanc sur
+noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant trois
+minutes, puis chaque lettre se fissure lentement, trois minutes chacune, avant
+de tomber en éclats, et la page réapparaît.
 
 ## Installation
 
@@ -15,25 +16,25 @@ ouvrir directement
 [le script brut](https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js).
 Actif sur `x.com`, `twitter.com` et `mobile.x.com`.
 
-## Déroulé (10 min)
+## Déroulé (15 min)
 
-La durée totale est fixée (`DUREE_TOTALE = 600 s`) ; le **final** garde son
-rythme (~25 s, la casse ne se fait pas au ralenti) et c'est la montée des
-battements qui s'étire pour remplir le reste — presque dix minutes de cœur qui
-bat avant que ça cède.
+`DUREE_TOTALE = 900 s` : ~3 min de battements, puis **3 min par lettre**
+(`ECART_FISSURE = 180 s`), puis le fondu.
 
 | Temps | Ce qui se passe |
 | --- | --- |
 | 0 → 0,9 s | Les lettres surgissent du fond l'une après l'autre, avec un léger rebond |
-| 0,9 → ~575 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, montée lente sur ~9 min 35. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
-| 575 s | Le T se fend : choc, fissures noires qui partent du point d'impact. 1,2 s plus tard, ses éclats tombent en tournoyant en 3D (~3 s en tout) |
-| 578 → 581 s | Pause : « ROP » reste seul, il frémit |
-| 581 s, 587 s, 593 s | Même chose pour R, puis O, puis P : 3 s de bris, 3 s de pause |
-| 596 → 600 s | Le noir s'efface, la page apparaît en fondu |
-| 600 s | Clavier, souris et défilement sont rendus |
+| 0,9 → ~179 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, sur ~3 min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
+| 179 s | Le T reçoit le choc : les premières fissures noires partent du point d'impact |
+| 179 → 354 s | Le T se fissure lentement : une fissure après l'autre (rayons qui s'allongent par tronçons, puis anneaux), rares au début, de plus en plus serrées ; chacune secoue la lettre, qui se disjoint peu à peu. Le reste du mot frémit, de plus en plus nerveux |
+| 354 → 356 s | Les éclats du T tombent en tournoyant en 3D |
+| 356 → 359 s | Pause : « ROP » reste seul, il frémit |
+| 359 s, 539 s, 719 s | Même chose pour R, puis O, puis P : 3 min chacune |
+| 896 → 900 s | Le noir s'efface, la page apparaît en fondu |
+| 900 s | Clavier, souris et défilement sont rendus |
 
 Tout se règle dans les constantes en tête de script (`MOT`, `DUREE_TOTALE`,
-`DUREE_BRIS`, `PAUSE_LETTRES`, `T_AVANT_CHUTE`, `BPM_DEBUT`…) ; `T_FISSURE`, la
+`ECART_FISSURE`, `PAUSE_LETTRES`, `DUREE_CHUTE`, `BPM_DEBUT`…) ; `T_FISSURE`, la
 fin et le fondu se recalculent tout seuls à partir de la durée totale.
 
 ## La fonte
@@ -187,6 +188,12 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   fondu gardent leur rythme (final ~25 s, de 575 s à 600 s), c'est la montée des
   battements qui s'étire. Recalcul de la chronologie vérifié ; le rendu sur 10 min
   réelles n'a pas été rejoué en navigateur ;
+- 15 min et bris lent (v4.4, Chrome headless sur une page locale, séquence
+  rejointe à différents instants) : battements à 60 s, T à peine fendu à 182 s,
+  de plus en plus fissuré à 260 s et 330 s, éclats en chute à 355 s, « ROP »
+  seul à 356 s, O fissuré à 700 s, fondu à 898 s, page rendue à 900 s. Les
+  fissures pas encore ouvertes ne se devinent pas (la lettre intacte reste
+  dessous jusqu'à la chute) ;
 - jauge (v4.2 : logique simulée hors navigateur, horloge et visibilité
   pilotées) : 300 s à regarder remplissent ~300 s ; 60 s à défiler en ajoutent
   120 (60 + 60 de surcoût, ×2) ; en quittant l'onglet, la jauge se vide d'une
