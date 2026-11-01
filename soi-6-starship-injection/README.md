@@ -49,6 +49,23 @@ serveur PHP.
 > un payload dans `score` finit en `NaN pts` et ne s'exécute pas. Le vecteur
 > fiable est donc **`wave`** (le champ est inséré tel quel dans `V.…`).
 
+## Onglet Injection : exemples et saisie personnalisée
+
+Le champ **Wave** accepte n'importe quel payload. Une liste déroulante
+**Exemples** propose quelques injections prêtes à l'emploi :
+
+| Exemple | Effet |
+| --- | --- |
+| **Alert (preuve de concept)** | Ferme le `<span>` « V. » puis injecte une `<img>` invalide qui exécute `alert(document.domain)` |
+| **Alert personnalisée** | Même principe avec un message custom |
+| **Deface (recouvre la page)** | Injecte un `<div>` plein écran « HACKED » qui recouvre le jeu/classement |
+| **Exfiltrer le cookie** | Redirige le navigateur vers un domaine contrôlé en joignant `document.cookie` |
+
+Choisir un exemple remplit le champ et affiche un **sous-titre d'explication**
+de ce que fait l'injection. On peut aussi simplement taper son propre payload :
+dès qu'on modifie le champ, la sélection est désactivée et le sous-titre passe
+en « saisie personnalisée ».
+
 ## À savoir
 
 - Le serveur refuse les visiteurs non connectés (le jeu affiche le message de
@@ -62,6 +79,6 @@ serveur PHP.
 
 | Field | Value |
 |-------|-------|
-| Version | 1.0.0 |
+| Version | 1.1.0 |
 | Match | `https://marcbluersky.com/soi_6_starship/*` |
 | Permissions | none |

