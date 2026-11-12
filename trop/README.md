@@ -1,7 +1,7 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (20 minutes cumulées, défiler les consomme deux fois plus
+passé trop de temps** (15 minutes cumulées, défiler les consomme deux fois plus
 vite, et quitter l'onglet les rend une par une), en même temps sur tous les
 onglets X : la page
 est **bloquée 15 minutes** et le mot **TROP** envahit l'écran, en blanc sur
@@ -65,14 +65,14 @@ très bien comme ça.
 ## Quand ça se déclenche
 
 Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est une
-**jauge de 20 minutes** qui se remplit quand on regarde et se **vide quand on
+**jauge de 15 minutes** qui se remplit quand on regarde et se **vide quand on
 part** :
 
 - chaque seconde passée **à regarder** X (onglet au premier plan **et** fenêtre
   active) la remplit d'**une** seconde ;
 - chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
   la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
-  ~10 min ;
+  ~7 min 30 ;
 - dès qu'on **quitte X**, elle se **vide d'une seconde par seconde**, le surcoût
   du défilement (rouge) d'abord, jusqu'à revenir **pleinement à zéro**. Autant de
   temps passé ailleurs, autant de temps rendu. « Quitter X », c'est changer
@@ -111,7 +111,7 @@ site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
 ```
 TROP dans 4:25                  [×2]
 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬────────────
-15:30 / 20:00       −5:20 en défilant
+10:35 / 15:00       −5:20 en défilant
 ```
 
 Mis à jour chaque seconde, dans tous les onglets :
