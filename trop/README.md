@@ -2,12 +2,11 @@
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (15 minutes cumulées, défiler les consomme deux fois plus
-vite, et elles ne reviennent que 45 minutes après la fin du TROP), en même temps sur tous les
-onglets X : la page
-est **bloquée 15 minutes** et le mot **TROP** envahit l'écran, en blanc sur
-noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant trois
-minutes, puis chaque lettre se fissure lentement, trois minutes chacune, avant
-de tomber en éclats, et la page réapparaît.
+vite, et quitter X ne les rend pas), en même temps sur tous les onglets X : la
+page est **bloquée 45 minutes** et le mot **TROP** envahit l'écran, en blanc sur
+noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant neuf
+minutes, puis chaque lettre se fissure lentement, neuf minutes chacune, avant
+de tomber en éclats, et la page réapparaît avec ses 15 minutes rendues.
 
 ## Installation
 
@@ -16,26 +15,34 @@ ouvrir directement
 [le script brut](https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js).
 Actif sur `x.com`, `twitter.com` et `mobile.x.com`.
 
-## Déroulé (15 min)
+## Déroulé (45 min)
 
-`DUREE_TOTALE = 900 s` : ~3 min de battements, puis **3 min par lettre**
-(`ECART_FISSURE = 180 s`), puis le fondu.
+`DUREE_TOTALE = ATTENTE_MIN × 60 = 2 700 s`, en cinq parts égales : ~9 min de
+battements, puis **9 min par lettre** (`ECART_FISSURE = 540 s`), puis le fondu.
 
 | Temps | Ce qui se passe |
 | --- | --- |
 | 0 → 0,9 s | Les lettres surgissent du fond l'une après l'autre, avec un léger rebond |
-| 0,9 → ~179 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, sur ~3 min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
-| 179 s | Le T reçoit le choc : les premières fissures noires partent du point d'impact |
-| 179 → 354 s | Le T se fissure lentement : une fissure après l'autre (rayons qui s'allongent par tronçons, puis anneaux), rares au début, de plus en plus serrées ; chacune secoue la lettre, qui se disjoint peu à peu. Le reste du mot frémit, de plus en plus nerveux |
-| 354 → 356 s | Les éclats du T tombent en tournoyant en 3D |
-| 356 → 359 s | Pause : « ROP » reste seul, il frémit |
-| 359 s, 539 s, 719 s | Même chose pour R, puis O, puis P : 3 min chacune |
-| 896 → 900 s | Le noir s'efface, la page apparaît en fondu |
-| 900 s | Clavier, souris et défilement sont rendus |
+| 0,9 → ~539 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, sur ~9 min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
+| 539 s | Le T reçoit le choc : les premières fissures noires partent du point d'impact |
+| 539 → 1074 s | Le T se fissure lentement, en ~80 étapes : chaque fissure (tronçon de rayon, puis arc d'anneau) s'ouvre à moitié puis se prolonge plus tard ; rares au début, de plus en plus serrées ; chacune secoue la lettre, qui se disjoint peu à peu. Le reste du mot frémit, de plus en plus nerveux |
+| 1074 → 1076 s | Les éclats du T tombent en tournoyant en 3D |
+| 1076 → 1079 s | Pause : « ROP » reste seul, il frémit |
+| 1079 s, 1619 s, 2159 s | Même chose pour R, puis O, puis P : 9 min chacune |
+| 2696 → 2700 s | Le noir s'efface, la page apparaît en fondu |
+| 2700 s | Clavier, souris et défilement sont rendus, la jauge revient à zéro |
+
+**Mêmes fissures partout** : le motif de chaque lettre (point d'impact,
+fissures, ordre d'apparition, trajectoires des éclats) est tiré d'un hasard
+reproductible dont la graine est l'heure de début de la séquence, commune à
+tous les onglets, et le rang de la lettre. Deux onglets, ou un onglet rechargé,
+montrent exactement les mêmes fissures au même moment, mises à l'échelle de
+l'écran. Seul le tremblement reste tiré au hasard par chaque onglet.
 
 Tout se règle dans les constantes en tête de script (`MOT`, `DUREE_TOTALE`,
-`ECART_FISSURE`, `PAUSE_LETTRES`, `DUREE_CHUTE`, `BPM_DEBUT`…) ; `T_FISSURE`, la
-fin et le fondu se recalculent tout seuls à partir de la durée totale.
+`ATTENTE_MIN`, `PAUSE_LETTRES`, `DUREE_CHUTE`, `BPM_DEBUT`…) ; les durées par
+lettre, `T_FISSURE`, la fin et le fondu se recalculent tout seuls à partir de
+la durée totale.
 
 ## La fonte
 
@@ -79,11 +86,11 @@ quand on part** :
   que la fenêtre n'est plus au premier plan (`visibilityState` *et*
   `document.hasFocus()`).
 
-Jauge pleine → TROP. Les 15 minutes ne sont rendues qu'**45 minutes après la
-fin de ce TROP** (`ATTENTE_MIN`), d'un coup, et c'est la seule façon de les
-récupérer. Jusque-là la jauge reste pleine : revenir sur X relance TROP, et ces
-relances ne repoussent pas l'heure de récupération, fixée au premier TROP
-(clé `trop:recup`).
+Jauge pleine → TROP, pendant **45 minutes** (`ATTENTE_MIN`) : c'est l'attente.
+À la fin de la séquence, les 15 minutes sont rendues d'un coup (clé
+`trop:recup`), et c'est la seule façon de les récupérer. Fermer l'onglet n'y
+change rien : un onglet X rouvert pendant ces 45 minutes rejoint la séquence là
+où elle en est.
 
 Le solde avance seconde par seconde (lissé, sans à-coups). Un défilement, c'est
 molette, tactile, ou un défilement juste après une touche (espace, j/k, flèches)
@@ -106,8 +113,8 @@ site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
   premier plan à la seconde précédente : en rouvrant X après une absence, le
   temps passé sans onglet ouvert n'est pas compté ;
 - quand la jauge est pleine, l'onglet affiché lance la séquence, note l'heure
-  de récupération (au premier TROP seulement), et tous les autres onglets X démarrent au même instant, sur la même
-  horloge : changer d'onglet n'y échappe pas ;
+  de récupération (sa fin), et tous les autres onglets X démarrent au même
+  instant, sur la même horloge : changer d'onglet n'y échappe pas ;
 - un onglet ouvert pendant une séquence la rejoint là où elle en est.
 
 ## Le panneau en haut à droite
@@ -172,7 +179,8 @@ Le code n'a rien de propre à X. Pour l'appliquer ailleurs, ajouter une ligne
   lettre découpée par `clip-path`. Les points sont partagés entre cases
   voisines, les morceaux s'emboîtent donc exactement. Les fissures sont
   tracées en noir par-dessus : invisibles sur le fond noir, elles n'apparaissent
-  que sur le blanc des lettres.
+  que sur le blanc des lettres. Le hasard de la découpe est un générateur à
+  graine (mulberry32), pour que tous les onglets brisent la lettre pareil.
 - **Filet de sécurité** : si une erreur survient pendant l'animation, la page
   est aussitôt débloquée. X n'est jamais rendu inutilisable.
 
@@ -208,6 +216,12 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   regard ; avant correction : 702) ; jauge pleine → TROP et récupération fixée à
   3 600 s (15 min de séquence + 45 min) ; TROP relancé pendant l'attente : jauge
   toujours pleine, heure de récupération inchangée ; attente écoulée → jauge à 0 ;
+- 45 min (v4.7, Chrome headless, séquence rejointe à différents instants) :
+  battements à 120 s, choc du T à 541 s, T de plus en plus fissuré à 700, 900 et
+  1070 s, « ROP » seul à 1076 s, choc du R à 1079 s, O fissuré à 2000 s, fondu à
+  2698 s, page rendue à 2701 s. Cohérence : la même séquence chargée deux fois,
+  en 1440 × 900 puis en 900 × 700, montre le même motif de fissures ; une
+  séquence au début différent en montre un autre ;
 - bris lettre par lettre (v4, quand la séquence durait 44,8 s) : à 21,6 s le T
   tombe, à 24,5 s « ROP » est intact (pause), à 39,6 s le P tombe ; page rendue à
   44,8 s. En v4.3 le même final se joue de 575 s à 600 s ;
