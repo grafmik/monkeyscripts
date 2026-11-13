@@ -2,7 +2,7 @@
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (15 minutes cumulées, défiler les consomme deux fois plus
-vite, et quitter l'onglet les rend une par une), en même temps sur tous les
+vite, et elles ne reviennent que 45 minutes après la fin du TROP), en même temps sur tous les
 onglets X : la page
 est **bloquée 15 minutes** et le mot **TROP** envahit l'écran, en blanc sur
 noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant trois
@@ -65,22 +65,25 @@ très bien comme ça.
 ## Quand ça se déclenche
 
 Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est une
-**jauge de 15 minutes** qui se remplit quand on regarde et se **vide quand on
-part** :
+**jauge de 15 minutes** qui se remplit quand on regarde, et **ne se vide pas
+quand on part** :
 
 - chaque seconde passée **à regarder** X (onglet au premier plan **et** fenêtre
   active) la remplit d'**une** seconde ;
 - chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
   la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
   ~7 min 30 ;
-- dès qu'on **quitte X**, elle se **vide d'une seconde par seconde**, le surcoût
-  du défilement (rouge) d'abord, jusqu'à revenir **pleinement à zéro**. Autant de
-  temps passé ailleurs, autant de temps rendu. « Quitter X », c'est changer
-  d'onglet, réduire la fenêtre, **changer de bureau (Space)** ou passer sur une
-  autre appli : tout ce qui fait que la fenêtre n'est plus au premier plan
-  (`visibilityState` *et* `document.hasFocus()`).
+- **quitter X** arrête de la remplir, mais ne rend **rien** : pas de seconde
+  récupérée. « Quitter X », c'est changer d'onglet, réduire la fenêtre,
+  **changer de bureau (Space)** ou passer sur une autre appli : tout ce qui fait
+  que la fenêtre n'est plus au premier plan (`visibilityState` *et*
+  `document.hasFocus()`).
 
-Jauge pleine → TROP, et **tout repart de zéro**.
+Jauge pleine → TROP. Les 15 minutes ne sont rendues qu'**45 minutes après la
+fin de ce TROP** (`ATTENTE_MIN`), d'un coup, et c'est la seule façon de les
+récupérer. Jusque-là la jauge reste pleine : revenir sur X relance TROP, et ces
+relances ne repoussent pas l'heure de récupération, fixée au premier TROP
+(clé `trop:recup`).
 
 Le solde avance seconde par seconde (lissé, sans à-coups). Un défilement, c'est
 molette, tactile, ou un défilement juste après une touche (espace, j/k, flèches)
@@ -88,21 +91,22 @@ ou un clic (ascenseur) ; les repositionnements faits par X lui-même ne comptent
 pas, et les secondes de la séquence TROP ne comptent ni dans un sens ni dans
 l'autre (solde gelé).
 
-Réglages : `BUDGET_MIN`, `COUT_DEFILEMENT`.
+Réglages : `BUDGET_MIN`, `COUT_DEFILEMENT`, `ATTENTE_MIN`.
 
 ### Partage entre onglets
 
 Le solde et l'heure de la dernière séquence sont partagés entre les onglets du
 site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
-`trop:defileVu` et `trop:debut`) :
+`trop:defileVu`, `trop:debut` et `trop:recup`) :
 
 - une **seule horloge** (`trop:maj`) fait avancer le solde : le premier onglet
   qui s'éveille consomme le temps écoulé puis repousse l'horloge, les autres
   voient alors un delta nul. Le temps n'est donc compté qu'une fois, quel que
-  soit le nombre d'onglets. La jauge ne se vide que lorsque **plus aucun** onglet
-  du site n'est au premier plan ;
-- quand la jauge est pleine, l'onglet affiché lance la séquence, remet le solde
-  à zéro, et tous les autres onglets X démarrent au même instant, sur la même
+  soit le nombre d'onglets. Seul compte le temps où un onglet était déjà au
+  premier plan à la seconde précédente : en rouvrant X après une absence, le
+  temps passé sans onglet ouvert n'est pas compté ;
+- quand la jauge est pleine, l'onglet affiché lance la séquence, note l'heure
+  de récupération (au premier TROP seulement), et tous les autres onglets X démarrent au même instant, sur la même
   horloge : changer d'onglet n'y échappe pas ;
 - un onglet ouvert pendant une séquence la rejoint là où elle en est.
 
@@ -125,8 +129,7 @@ Mis à jour chaque seconde, dans tous les onglets :
   défilement a coûté en plus (rouge) ;
 - dessous : le budget consommé, et ce qui a été perdu à défiler.
 
-Quitter l'onglet fait **remonter** le compte d'une seconde par seconde (et
-rétrécir la barre) jusqu'à son plein.
+Quitter l'onglet fige le compte : il ne remonte pas.
 
 Le panneau laisse passer les clics (`pointer-events: none`), vit dans un shadow
 root fermé comme la scène, et disparaît pendant la séquence.
@@ -197,9 +200,14 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
 - jauge (v4.2 : logique simulée hors navigateur, horloge et visibilité
   pilotées) : 300 s à regarder remplissent ~300 s ; 60 s à défiler en ajoutent
   120 (60 + 60 de surcoût, ×2) ; en quittant l'onglet, la jauge se vide d'une
-  seconde par seconde (le surcoût d'abord) et revient à 0 ; deux « onglets » qui
+  seconde par seconde (le surcoût d'abord) et revient à 0 [remplacé en v4.6] ; deux « onglets » qui
   avancent la même seconde ne la comptent qu'une fois. Le déroulé de la séquence
   TROP lui-même n'a pas été rejoué en v4.2 (inchangé depuis v4) ;
+- jauge sans vidange (v4.6, Chrome headless, focus émulé, localStorage préparé) :
+  revenir après 10 min sans onglet X n'ajoute rien (100 → 102 s en 2 s de
+  regard ; avant correction : 702) ; jauge pleine → TROP et récupération fixée à
+  3 600 s (15 min de séquence + 45 min) ; TROP relancé pendant l'attente : jauge
+  toujours pleine, heure de récupération inchangée ; attente écoulée → jauge à 0 ;
 - bris lettre par lettre (v4, quand la séquence durait 44,8 s) : à 21,6 s le T
   tombe, à 24,5 s « ROP » est intact (pause), à 39,6 s le P tombe ; page rendue à
   44,8 s. En v4.3 le même final se joue de 575 s à 600 s ;

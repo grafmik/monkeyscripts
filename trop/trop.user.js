@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.5.0
+// @version     4.6.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; quitter l'onglet rend le temps, une seconde par seconde), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; elles ne reviennent que 45 minutes après la fin du TROP), bloque tous les onglets à la fois : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -23,10 +23,12 @@
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
     // Déclenchement : une jauge de BUDGET_MIN minutes. Chaque seconde passée sur X
     // (un onglet au premier plan) la remplit d'une seconde, une seconde passée à y
-    // défiler de COUT_DEFILEMENT ; dès qu'on quitte X, elle se VIDE d'une seconde
-    // par seconde jusqu'à zéro. Pleine → TROP, et tout repart de zéro.
+    // défiler de COUT_DEFILEMENT. Quitter X ne la vide PAS. Pleine → TROP, et la
+    // jauge reste pleine (tout retour sur X relance TROP) jusqu'à ATTENTE_MIN
+    // minutes après la fin de ce premier TROP : alors seulement elle revient à zéro.
     const BUDGET_MIN = 15;
     const COUT_DEFILEMENT = 2;
+    const ATTENTE_MIN = 45;
     // Chronologie, en secondes depuis le début de la séquence. 15 minutes en tout :
     // ~3 min où le mot bat et tremble, puis 3 min par lettre — elle se fissure
     // lentement, une fissure après l'autre, de plus en plus vite, jusqu'à ce que
@@ -75,6 +77,7 @@
     const CLE = 'trop:debut';
     const CLE_BASE = 'trop:base', CLE_SURCOUT = 'trop:surcout', CLE_MAJ = 'trop:maj';
     const CLE_VU = 'trop:vu', CLE_DEFILE_VU = 'trop:defileVu';
+    const CLE_RECUP = 'trop:recup';   // heure où la jauge revient à zéro (0 : pas épuisée)
     const lireDebut = () => num(CLE);
     const BUDGET_S = BUDGET_MIN * 60;
     const GRACE_MS = 1500;      // au-delà de ce silence, plus aucun onglet au premier plan
@@ -91,8 +94,8 @@
     // Un seau de BUDGET_S secondes : CLE_BASE = temps regardé (une seconde par
     // seconde), CLE_SURCOUT = le surcoût du défilement par-dessus. Il se remplit
     // tant qu'un onglet du site est au premier plan (CLE_VU, rafraîchi chaque
-    // seconde par les onglets actifs) et se VIDE dès qu'on le quitte, d'une
-    // seconde par seconde, le surcoût (rouge) d'abord, jusqu'à zéro.
+    // seconde par les onglets actifs). Le quitter ne la vide pas : elle ne revient
+    // à zéro qu'à l'heure CLE_RECUP, fixée au premier TROP (sa fin + ATTENTE_MIN).
     // Une seule horloge (CLE_MAJ) avance le solde : le premier onglet qui s'éveille
     // consomme le temps écoulé puis repousse l'horloge, les autres voient alors
     // dt ≈ 0 — rien n'est compté deux fois, quel que soit le nombre d'onglets.
@@ -100,22 +103,27 @@
 
     function avancer() {
         const now = Date.now();
+        // Regardé = un onglet était déjà au premier plan au tic précédent. Lu AVANT
+        // de marquer celui-ci : sinon, en rouvrant X, tout le temps passé sans
+        // onglet ouvert (horloge figée depuis) serait compté comme regardé.
+        const regarde = now - num(CLE_VU) < GRACE_MS;
         if (auPremierPlan() && !enCours) ecrire(CLE_VU, String(now));
         const maj = num(CLE_MAJ) || now;
         let dt = (now - maj) / 1000;
         if (dt <= 0) { ecrire(CLE_MAJ, String(now)); return; }
         if (dt > 3600) dt = 3600;   // après une veille machine : au plus 1 h d'un coup
         let base = num(CLE_BASE), surcout = num(CLE_SURCOUT);
-        if (enCours) {
-            // la séquence TROP ne compte ni dans un sens ni dans l'autre : solde gelé
-        } else if (now - num(CLE_VU) < GRACE_MS) {
+        const recup = num(CLE_RECUP);
+        if (recup && now >= recup) {
+            base = 0; surcout = 0;                                   // l'attente est finie : jauge rendue
+            ecrire(CLE_RECUP, '0');
+        } else if (enCours || recup) {
+            // pendant la séquence, ou jauge épuisée en attente : solde gelé
+        } else if (regarde) {
             base += dt;                                              // on regarde X : +1 s/s
             if (now - num(CLE_DEFILE_VU) < GRACE_MS) surcout += dt * (COUT_DEFILEMENT - 1);
-        } else {
-            let rendre = dt;                                         // on a quitté X : −1 s/s
-            const dS = Math.min(surcout, rendre); surcout -= dS; rendre -= dS;
-            base = Math.max(0, base - rendre);
         }
+        // on a quitté X : rien ne se vide
         ecrire(CLE_BASE, String(base));
         ecrire(CLE_SURCOUT, String(surcout));
         ecrire(CLE_MAJ, String(now));
@@ -146,9 +154,10 @@
     // --- Déclenchement synchronisé ----------------------------------------------------
     // - une séquence est en cours : l'onglet la rejoint, calé sur la même horloge,
     //   et affiche exactement la même image ;
-    // - la jauge est pleine : l'onglet VISIBLE en lance une nouvelle, remet le
-    //   solde à zéro, et l'événement « storage » fait démarrer tous les autres
-    //   onglets au même instant.
+    // - la jauge est pleine : l'onglet VISIBLE en lance une nouvelle, note le
+    //   moment où la jauge sera rendue (la première fois seulement : les TROP
+    //   relancés pendant l'attente ne la repoussent pas), et l'événement
+    //   « storage » fait démarrer tous les autres onglets au même instant.
 
     function verifier() {
         const html = document.documentElement;
@@ -159,9 +168,7 @@
             const {regard, surcout} = consommation();
             if (document.visibilityState !== 'visible' || regard + surcout < BUDGET_S) return;
             debut = maintenant;
-            ecrire(CLE_BASE, '0');
-            ecrire(CLE_SURCOUT, '0');
-            ecrire(CLE_MAJ, String(maintenant));
+            if (!num(CLE_RECUP)) ecrire(CLE_RECUP, String(maintenant + T_FIN * 1000 + ATTENTE_MIN * 60000));
             ecrire(CLE, String(debut));
         }
         enCours = true;
@@ -181,8 +188,7 @@
     // En haut à droite : le temps avant le prochain TROP si l'on reste à regarder
     // sans défiler, soit tout bonnement ce qui reste à remplir dans la jauge.
     // Il descend d'une seconde par seconde quand on regarde, deux fois plus vite
-    // quand on défile, et REMONTE d'une seconde par seconde quand on quitte X,
-    // jusqu'à revenir à son plein.
+    // quand on défile, et ne remonte pas quand on quitte X.
     function secondesAvantTrop({regard, surcout}) {
         return Math.max(0, BUDGET_S - regard - surcout);
     }
@@ -292,12 +298,12 @@
     }).observe(document, {childList: true});
     addEventListener('storage', e => {
         if (e.key === CLE) verifier();
-        if (e.key === CLE || e.key === CLE_BASE || e.key === CLE_SURCOUT) majCompteur();
+        if (e.key === CLE || e.key === CLE_BASE || e.key === CLE_SURCOUT || e.key === CLE_RECUP) majCompteur();
     });
     document.addEventListener('visibilitychange', toutVerifier);
     // Changer de bureau (Space) ou d'appli ne change pas la visibilité mais fait
     // perdre/reprendre le focus : on recalcule aussitôt pour que la jauge se mette
-    // à se vider (ou à se remplir) sans attendre le tic suivant.
+    // à se remplir (ou à s'arrêter) sans attendre le tic suivant.
     addEventListener('blur', toutVerifier);
     addEventListener('focus', toutVerifier);
     setInterval(toutVerifier, 1000);
