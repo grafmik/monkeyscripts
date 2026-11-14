@@ -86,6 +86,16 @@ peu à peu quand on part** :
   que la fenêtre n'est plus au premier plan (`visibilityState` *et*
   `document.hasFocus()`).
 
+**Lire un article X ne compte pas.** Les articles (format long, parfois 30 min
+de lecture) obligent à défiler sans arrêt : au tarif du fil, la jauge serait
+pleine au premier tiers. Pendant qu'un article est à l'écran, la jauge est
+**figée** : elle ne se remplit pas, et le décompte d'absence ne court pas non
+plus (on est sur X). Le voyant du panneau passe au vert : **ARTICLE**.
+Reconnaissance (relevée sur x.com le 2026-11-14) : l'adresse
+`/<compte>/article/<id>` (vue plein écran), ou, sur la page du tweet
+`/<compte>/status/<id>`, des liens vers `/<compte>/article/<même id>`. Un tweet
+qui cite un article, ou un article aperçu dans le fil, ne fige rien.
+
 Les 15 minutes reviennent d'un coup, et seulement après **45 minutes**
 (`ATTENTE_MIN`) d'attente, de l'une de ces deux façons :
 
@@ -226,6 +236,9 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   regard ; avant correction : 702) ; jauge pleine → TROP et récupération fixée à
   3 600 s (15 min de séquence + 45 min) ; TROP relancé pendant l'attente : jauge
   toujours pleine, heure de récupération inchangée ; attente écoulée → jauge à 0 ;
+- articles (v4.9, sur le vrai x.com, non connecté, script injecté, focus
+  émulé) : en 6 s, la jauge reste à 100 s sur la page du tweet-article et sur
+  l'article plein écran (voyant ARTICLE), et passe à 105 s sur un tweet normal ;
 - décompte d'absence (v4.8, Chrome headless, focus émulé ou non) : retour après
   44 min → jauge intacte (600 → 602 s) ; retour après 46 min → jauge à 0 ;
   fenêtre visible sans focus depuis 10 min → jauge inchangée, panneau

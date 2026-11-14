@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.8.0
+// @version     4.9.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 45 minutes d'affilée loin de X les rendent), bloque tous les onglets à la fois pendant 45 minutes : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 45 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant 45 minutes : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -78,6 +78,7 @@
     const CLE = 'trop:debut';
     const CLE_BASE = 'trop:base', CLE_SURCOUT = 'trop:surcout', CLE_MAJ = 'trop:maj';
     const CLE_VU = 'trop:vu', CLE_DEFILE_VU = 'trop:defileVu';
+    const CLE_ARTICLE_VU = 'trop:articleVu';   // dernier instant où un article était lu
     const CLE_RECUP = 'trop:recup';   // heure où la jauge revient à zéro (0 : pas épuisée)
     const lireDebut = () => num(CLE);
     const BUDGET_S = BUDGET_MIN * 60;
@@ -104,6 +105,20 @@
     // dt ≈ 0 — rien n'est compté deux fois, quel que soit le nombre d'onglets.
     const consommation = () => ({regard: num(CLE_BASE), surcout: num(CLE_SURCOUT)});
 
+    // Lire un article X (format long, 30 min de lecture parfois) ne remplit pas la
+    // jauge : c'est de la lecture, pas du fil. Un article se reconnaît (relevé sur
+    // x.com le 2026-11-14, aussi sans être connecté) :
+    // - en plein écran, à son adresse : /<compte>/article/<id> ou /i/article/<id> ;
+    // - dans la page du tweet /<compte>/status/<id>, aux liens vers
+    //   /<compte>/article/<MÊME id> (titre, images). Un tweet qui en cite un
+    //   autre, ou un article dans le fil, porte un autre id : pas de faux positif.
+    function lectureArticle() {
+        const p = location.pathname;
+        if (/\/article\/\d+/.test(p)) return true;
+        const m = p.match(/\/status\/(\d+)/);
+        return !!m && !!document.querySelector(`a[href*="/article/${m[1]}"]`);
+    }
+
     function avancer() {
         const now = Date.now();
         // Regardé = un onglet était déjà au premier plan au tic précédent. Lu AVANT
@@ -111,7 +126,11 @@
         // onglet ouvert (horloge figée depuis) serait compté comme regardé.
         const absence = now - num(CLE_VU);
         const regarde = absence < GRACE_MS;
-        if (auPremierPlan() && !enCours) ecrire(CLE_VU, String(now));
+        if (auPremierPlan() && !enCours) {
+            ecrire(CLE_VU, String(now));
+            if (lectureArticle()) ecrire(CLE_ARTICLE_VU, String(now));
+        }
+        const article = now - num(CLE_ARTICLE_VU) < GRACE_MS;
         const maj = num(CLE_MAJ) || now;
         let dt = (now - maj) / 1000;
         if (dt <= 0) { ecrire(CLE_MAJ, String(now)); return; }
@@ -125,6 +144,8 @@
             // pendant la séquence, ou jauge épuisée en attente : solde gelé
         } else if (absence >= ATTENTE_MIN * 60000) {
             base = 0; surcout = 0;                                   // 45 min loin de X : jauge rendue
+        } else if (article) {
+            // on lit un article : jauge figée (ni remplie, ni décompte d'absence)
         } else if (regarde) {
             base += dt;                                              // on regarde X : +1 s/s
             if (now - num(CLE_DEFILE_VU) < GRACE_MS) surcout += dt * (COUT_DEFILEMENT - 1);
@@ -232,6 +253,7 @@
         background: rgba(255,255,255,.12); color: rgba(255,255,255,.35); transition: all .2s;
     }
     .voyant.actif { background: #ff453a; color: #fff; }
+    .voyant.article { background: #30d158; color: #000; }
     .barre {
         position: relative; height: 6px; margin-top: 5px; border-radius: 3px;
         overflow: hidden; background: rgba(255,255,255,.22);
@@ -285,7 +307,11 @@
         const rendue = !num(CLE_RECUP) && absence >= GRACE_MS && conso.regard + conso.surcout > 0;
         ui.titre.textContent = rendue ? `Rendu dans ${duree(ATTENTE_MIN * 60 - absence / 1000)}` : `${MOT} dans ${duree(s)}`;
         ui.titre.classList.toggle('urgent', !rendue && s < 60);
-        ui.voyant.classList.toggle('actif', Date.now() - num(CLE_DEFILE_VU) < GRACE_MS);
+        // Article en cours de lecture : le voyant passe au vert, « ARTICLE », jauge figée
+        const article = Date.now() - num(CLE_ARTICLE_VU) < GRACE_MS;
+        ui.voyant.textContent = article ? 'ARTICLE' : `×${COUT_DEFILEMENT}`;
+        ui.voyant.classList.toggle('article', article);
+        ui.voyant.classList.toggle('actif', !article && Date.now() - num(CLE_DEFILE_VU) < GRACE_MS);
 
         const regard = Math.min(conso.regard, BUDGET_S);
         const surcout = Math.min(conso.surcout, BUDGET_S - regard);
