@@ -2,7 +2,7 @@
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
 passé trop de temps** (15 minutes cumulées, défiler les consomme deux fois plus
-vite, et quitter X ne les rend pas), en même temps sur tous les onglets X : la
+vite, et seules 45 minutes d'affilée loin de X les rendent), en même temps sur tous les onglets X : la
 page est **bloquée 45 minutes** et le mot **TROP** envahit l'écran, en blanc sur
 noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant neuf
 minutes, puis chaque lettre se fissure lentement, neuf minutes chacune, avant
@@ -73,24 +73,32 @@ très bien comme ça.
 
 Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est une
 **jauge de 15 minutes** qui se remplit quand on regarde, et **ne se vide pas
-quand on part** :
+peu à peu quand on part** :
 
 - chaque seconde passée **à regarder** X (onglet au premier plan **et** fenêtre
   active) la remplit d'**une** seconde ;
 - chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
   la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
   ~7 min 30 ;
-- **quitter X** arrête de la remplir, mais ne rend **rien** : pas de seconde
-  récupérée. « Quitter X », c'est changer d'onglet, réduire la fenêtre,
+- **quitter X** arrête de la remplir, mais ne rend rien seconde par seconde : il
+  lance un **décompte de 45 minutes** (voir plus bas). « Quitter X », c'est changer d'onglet, réduire la fenêtre,
   **changer de bureau (Space)** ou passer sur une autre appli : tout ce qui fait
   que la fenêtre n'est plus au premier plan (`visibilityState` *et*
   `document.hasFocus()`).
 
-Jauge pleine → TROP, pendant **45 minutes** (`ATTENTE_MIN`) : c'est l'attente.
-À la fin de la séquence, les 15 minutes sont rendues d'un coup (clé
-`trop:recup`), et c'est la seule façon de les récupérer. Fermer l'onglet n'y
-change rien : un onglet X rouvert pendant ces 45 minutes rejoint la séquence là
-où elle en est.
+Les 15 minutes reviennent d'un coup, et seulement après **45 minutes**
+(`ATTENTE_MIN`) d'attente, de l'une de ces deux façons :
+
+- **en partant de X** : dès qu'aucun onglet X n'est plus au premier plan, le
+  décompte démarre. 45 minutes d'affilée loin de X → jauge à zéro, même sans
+  être allé jusqu'à TROP. Revenir sur X avant la fin **annule** le décompte : la
+  jauge reprend là où elle était, et le prochain départ repart de 45:00. Le
+  décompte court aussi quand aucun onglet X n'est ouvert, ou quand la machine
+  est en veille : la remise à zéro se fait à la réouverture ;
+- **par TROP** : jauge pleine → TROP, pendant 45 minutes : c'est l'attente. À
+  la fin de la séquence, la jauge revient à zéro (clé `trop:recup`). Fermer
+  l'onglet n'y change rien : un onglet X rouvert pendant ces 45 minutes rejoint
+  la séquence là où elle en est.
 
 Le solde avance seconde par seconde (lissé, sans à-coups). Un défilement, c'est
 molette, tactile, ou un défilement juste après une touche (espace, j/k, flèches)
@@ -136,7 +144,9 @@ Mis à jour chaque seconde, dans tous les onglets :
   défilement a coûté en plus (rouge) ;
 - dessous : le budget consommé, et ce qui a été perdu à défiler.
 
-Quitter l'onglet fige le compte : il ne remonte pas.
+Quitter X fige le compte. Si la fenêtre reste visible sans avoir le focus
+(autre appli à côté, second écran), le titre devient **« Rendu dans 44:59 »** :
+le décompte avant que la jauge soit rendue.
 
 Le panneau laisse passer les clics (`pointer-events: none`), vit dans un shadow
 root fermé comme la scène, et disparaît pendant la séquence.
@@ -216,6 +226,10 @@ styles et les polices, Trusted Types, champ de saisie en `autofocus`) :
   regard ; avant correction : 702) ; jauge pleine → TROP et récupération fixée à
   3 600 s (15 min de séquence + 45 min) ; TROP relancé pendant l'attente : jauge
   toujours pleine, heure de récupération inchangée ; attente écoulée → jauge à 0 ;
+- décompte d'absence (v4.8, Chrome headless, focus émulé ou non) : retour après
+  44 min → jauge intacte (600 → 602 s) ; retour après 46 min → jauge à 0 ;
+  fenêtre visible sans focus depuis 10 min → jauge inchangée, panneau
+  « Rendu dans 34:57 » ; sans focus depuis 46 min → jauge à 0 ;
 - 45 min (v4.7, Chrome headless, séquence rejointe à différents instants) :
   battements à 120 s, choc du T à 541 s, T de plus en plus fissuré à 700, 900 et
   1070 s, « ROP » seul à 1076 s, choc du R à 1079 s, O fissuré à 2000 s, fondu à

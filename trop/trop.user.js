@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.7.0
+// @version     4.8.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; quitter X ne les rend pas), bloque tous les onglets à la fois pendant 45 minutes : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 45 minutes d'affilée loin de X les rendent), bloque tous les onglets à la fois pendant 45 minutes : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -23,8 +23,10 @@
     const LARGEUR = 0.97;       // part de la largeur de l'écran occupée par le mot
     // Déclenchement : une jauge de BUDGET_MIN minutes. Chaque seconde passée sur X
     // (un onglet au premier plan) la remplit d'une seconde, une seconde passée à y
-    // défiler de COUT_DEFILEMENT. Quitter X ne la vide PAS. Pleine → TROP, qui dure
-    // ATTENTE_MIN minutes : c'est l'attente. À la fin, la jauge revient à zéro.
+    // défiler de COUT_DEFILEMENT. Pleine → TROP, qui dure ATTENTE_MIN minutes :
+    // c'est l'attente. À la fin, la jauge revient à zéro. Quitter X ne la vide pas
+    // peu à peu, mais rester ATTENTE_MIN minutes D'AFFILÉE loin de X la remet à
+    // zéro aussi ; revenir avant annule ce décompte.
     const BUDGET_MIN = 15;
     const COUT_DEFILEMENT = 2;
     const ATTENTE_MIN = 45;
@@ -93,8 +95,10 @@
     // Un seau de BUDGET_S secondes : CLE_BASE = temps regardé (une seconde par
     // seconde), CLE_SURCOUT = le surcoût du défilement par-dessus. Il se remplit
     // tant qu'un onglet du site est au premier plan (CLE_VU, rafraîchi chaque
-    // seconde par les onglets actifs). Le quitter ne la vide pas : elle ne revient
-    // à zéro qu'à l'heure CLE_RECUP, la fin du TROP.
+    // seconde par les onglets actifs). Le quitter ne la vide pas peu à peu : elle
+    // revient à zéro à l'heure CLE_RECUP (la fin du TROP), ou après ATTENTE_MIN
+    // minutes d'affilée sans aucun onglet au premier plan (CLE_VU trop ancien) ;
+    // revenir avant remet ce décompte à zéro, puisque CLE_VU est rafraîchi.
     // Une seule horloge (CLE_MAJ) avance le solde : le premier onglet qui s'éveille
     // consomme le temps écoulé puis repousse l'horloge, les autres voient alors
     // dt ≈ 0 — rien n'est compté deux fois, quel que soit le nombre d'onglets.
@@ -105,7 +109,8 @@
         // Regardé = un onglet était déjà au premier plan au tic précédent. Lu AVANT
         // de marquer celui-ci : sinon, en rouvrant X, tout le temps passé sans
         // onglet ouvert (horloge figée depuis) serait compté comme regardé.
-        const regarde = now - num(CLE_VU) < GRACE_MS;
+        const absence = now - num(CLE_VU);
+        const regarde = absence < GRACE_MS;
         if (auPremierPlan() && !enCours) ecrire(CLE_VU, String(now));
         const maj = num(CLE_MAJ) || now;
         let dt = (now - maj) / 1000;
@@ -118,11 +123,13 @@
             ecrire(CLE_RECUP, '0');
         } else if (enCours || recup) {
             // pendant la séquence, ou jauge épuisée en attente : solde gelé
+        } else if (absence >= ATTENTE_MIN * 60000) {
+            base = 0; surcout = 0;                                   // 45 min loin de X : jauge rendue
         } else if (regarde) {
             base += dt;                                              // on regarde X : +1 s/s
             if (now - num(CLE_DEFILE_VU) < GRACE_MS) surcout += dt * (COUT_DEFILEMENT - 1);
         }
-        // on a quitté X : rien ne se vide
+        // on a quitté X depuis moins de ATTENTE_MIN : rien ne bouge
         ecrire(CLE_BASE, String(base));
         ecrire(CLE_SURCOUT, String(surcout));
         ecrire(CLE_MAJ, String(now));
@@ -272,8 +279,12 @@
 
         const conso = consommation();
         const s = secondesAvantTrop(conso);
-        ui.titre.textContent = `${MOT} dans ${duree(s)}`;
-        ui.titre.classList.toggle('urgent', s < 60);
+        // Loin de X (fenêtre visible mais sans le focus) : le titre montre le
+        // décompte avant que la jauge soit rendue
+        const absence = Date.now() - num(CLE_VU);
+        const rendue = !num(CLE_RECUP) && absence >= GRACE_MS && conso.regard + conso.surcout > 0;
+        ui.titre.textContent = rendue ? `Rendu dans ${duree(ATTENTE_MIN * 60 - absence / 1000)}` : `${MOT} dans ${duree(s)}`;
+        ui.titre.classList.toggle('urgent', !rendue && s < 60);
         ui.voyant.classList.toggle('actif', Date.now() - num(CLE_DEFILE_VU) < GRACE_MS);
 
         const regard = Math.min(conso.regard, BUDGET_S);
