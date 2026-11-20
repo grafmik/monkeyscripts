@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.9.0
+// @version     4.10.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 45 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant 45 minutes : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 60 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant une heure : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -29,22 +29,22 @@
     // zéro aussi ; revenir avant annule ce décompte.
     const BUDGET_MIN = 15;
     const COUT_DEFILEMENT = 2;
-    const ATTENTE_MIN = 45;
-    // Chronologie, en secondes depuis le début de la séquence. 45 minutes en tout,
-    // en cinq parts égales : ~9 min où le mot bat et tremble, puis 9 min par
+    const ATTENTE_MIN = 60;
+    // Chronologie, en secondes depuis le début de la séquence. 60 minutes en tout,
+    // en cinq parts égales : ~12 min où le mot bat et tremble, puis 12 min par
     // lettre — elle se fissure lentement, une fissure après l'autre, de plus en
     // plus vite, jusqu'à ce que ses éclats tombent —, puis le fondu.
-    const DUREE_TOTALE = ATTENTE_MIN * 60;   // 45 minutes en tout
+    const DUREE_TOTALE = ATTENTE_MIN * 60;   // 60 minutes en tout
     const T_ENTREE = 0.9;       // zoom d'entrée des lettres
-    const ECART_FISSURE = DUREE_TOTALE / (MOT.length + 1);  // 9 min par lettre
+    const ECART_FISSURE = DUREE_TOTALE / (MOT.length + 1);  // 12 min par lettre
     const PAUSE_LETTRES = 3;    // silence entre la chute d'une lettre et la lettre suivante
     const DUREE_CHUTE = 1.8;    // de la chute des éclats à leur disparition
     const DUREE_BRIS = ECART_FISSURE - PAUSE_LETTRES;  // de la première fissure au dernier éclat
-    const T_AVANT_CHUTE = DUREE_BRIS - DUREE_CHUTE;    // la lettre se fissure pendant ~8 min 55
+    const T_AVANT_CHUTE = DUREE_BRIS - DUREE_CHUTE;    // la lettre se fissure pendant ~11 min 55
     const DUREE_FONDU = 3.8;    // du dernier éclat à la page rendue
-    // Durée du final, de la première fissure à la page rendue (~36 min)
+    // Durée du final, de la première fissure à la page rendue (~48 min)
     const DUREE_FINAL = (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS + DUREE_FONDU;
-    const T_FISSURE = DUREE_TOTALE - DUREE_FINAL;   // première lettre qui se fissure (~9 min)
+    const T_FISSURE = DUREE_TOTALE - DUREE_FINAL;   // première lettre qui se fissure (~12 min)
     const T_COEUR = T_FISSURE - 0.3;                // fin des battements, juste avant
     const T_FONDU = T_FISSURE + (MOT.length - 1) * ECART_FISSURE + DUREE_BRIS;  // le noir s'efface
     const T_FIN = DUREE_TOTALE;   // la page est rendue à l'utilisateur
@@ -143,7 +143,7 @@
         } else if (enCours || recup) {
             // pendant la séquence, ou jauge épuisée en attente : solde gelé
         } else if (absence >= ATTENTE_MIN * 60000) {
-            base = 0; surcout = 0;                                   // 45 min loin de X : jauge rendue
+            base = 0; surcout = 0;                                   // 60 min loin de X : jauge rendue
         } else if (article) {
             // on lit un article : jauge figée (ni remplie, ni décompte d'absence)
         } else if (regarde) {
