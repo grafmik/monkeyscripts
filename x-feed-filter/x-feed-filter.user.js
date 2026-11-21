@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name        X : fil sans politique, religion ni immigration
+// @name        X : fil sans politique ni religion
 // @namespace   Violentmonkey Scripts
 // @version     1.0.0
 //
