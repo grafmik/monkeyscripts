@@ -1,12 +1,19 @@
 // ==UserScript==
 // @name         Gemini Quick Delete & Next (Targeted)
 // @namespace    https://violentmonkey.github.io/
-// @version      2.0
+// @version      2.0.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/gemini-delete-chat-keyb-shortcut/gemini-delete-chat-keyb-shortcut.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/gemini-delete-chat-keyb-shortcut/gemini-delete-chat-keyb-shortcut.user.js
 // @description  Supprime et sélectionne le suivant via data-test-id
 // @author       Gemini AI
 // @match        https://gemini.google.com/app*
 // @grant        none
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';

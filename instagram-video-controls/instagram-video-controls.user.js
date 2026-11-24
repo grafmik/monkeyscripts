@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name        Instagram : barre de contrôle vidéo
 // @namespace   Violentmonkey Scripts
-// @version     3.0.0
+// @version     3.0.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/instagram-video-controls/instagram-video-controls.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/instagram-video-controls/instagram-video-controls.user.js
 //
 // @match       https://www.instagram.com/*
 // @grant       none
@@ -9,6 +11,11 @@
 // @author      Mik
 // @description Barre de progression cliquable, lecture/pause, temps écoulé et raccourcis clavier (← → espace) sur les vidéos Instagram (feed et reels).
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';

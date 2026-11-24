@@ -2,7 +2,9 @@
 // @name        Panneau Score / Injection — Soi 6 Starship
 // @namespace   Violentmonkey Scripts
 // @icon
-// @version     1.1.0
+// @version     1.1.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/soi-6-starship-injection/soi-6-starship-injection.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/soi-6-starship-injection/soi-6-starship-injection.user.js
 //
 // @match       https://marcbluersky.com/soi_6_starship/*
 // @grant       none
@@ -10,6 +12,11 @@
 // @author      Mik
 // @description
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';

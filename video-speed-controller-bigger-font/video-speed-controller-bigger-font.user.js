@@ -1,11 +1,18 @@
 // ==UserScript==
 // @name         VSC Controller Persistent Resizer (Lucide Icons + Shortcuts)
-// @version      1.7
+// @version      1.7.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/video-speed-controller-bigger-font/video-speed-controller-bigger-font.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/video-speed-controller-bigger-font/video-speed-controller-bigger-font.user.js
 // @description  Agrandissement du VSC (icônes Lucide + raccourcis J/K) compatible Trusted Types
 // @match        *://*/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';

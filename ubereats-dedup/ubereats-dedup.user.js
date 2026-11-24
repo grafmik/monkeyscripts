@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name        Uber Eats : masquer les plats en double
 // @namespace   Violentmonkey Scripts
-// @version     2.0.0
+// @version     2.0.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/ubereats-dedup/ubereats-dedup.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/ubereats-dedup/ubereats-dedup.user.js
 //
 // @match       https://www.ubereats.com/*/store/*
 // @grant       none
@@ -9,6 +11,11 @@
 // @author      Mik
 // @description Masque les plats déjà affichés plus haut dans la page, les catégories devenues vides et leur entrée de sommaire.
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';

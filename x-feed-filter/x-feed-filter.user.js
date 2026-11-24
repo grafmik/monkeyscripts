@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name        X : fil sans politique ni religion
 // @namespace   Violentmonkey Scripts
-// @version     1.0.0
+// @version     1.0.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/x-feed-filter/x-feed-filter.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/x-feed-filter/x-feed-filter.user.js
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -12,6 +14,11 @@
 // @author      Mik
 // @description Sur le fil Accueil de X, replie les posts qui parlent de politique, de religion ou d'immigration (texte, citation, carte de lien et sous-titres auto des vidéos) et clique « Ce post ne m'intéresse pas » à rythme lent pour éduquer l'algorithme.
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (() => {
   'use strict';

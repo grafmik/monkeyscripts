@@ -1,7 +1,9 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.11.0
+// @version     4.11.1
+// @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js
+// @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -13,6 +15,11 @@
 // @author      Mik
 // @description Après 12 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 60 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant une heure : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
+// Mise à jour : installer depuis le lien @downloadURL ci-dessus (pas depuis un
+// fichier local, que Violentmonkey ne relit jamais). Il revérifie ce lien chaque
+// jour ; pour forcer : tableau de bord → « Vérifier les mises à jour ». Une
+// version n'est prise que si @version augmente. Recharger ensuite les onglets
+// déjà ouverts : ils gardent l'ancienne version.
 
 (function() {
     'use strict';
