@@ -1,8 +1,9 @@
 // ==UserScript==
 // @name         VSC Controller Persistent Resizer (Lucide Icons + Shortcuts)
-// @version      1.7.1
+// @version      1.7.2
 // @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/video-speed-controller-bigger-font/video-speed-controller-bigger-font.user.js
 // @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/video-speed-controller-bigger-font/video-speed-controller-bigger-font.user.js
+// @author       Mik
 // @description  Agrandissement du VSC (icônes Lucide + raccourcis J/K) compatible Trusted Types
 // @match        *://*/*
 // @grant        none
