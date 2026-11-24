@@ -1,12 +1,12 @@
 # TROP : pause forcée à la Gaspar Noé
 
 X est fait pour qu'on y reste. Ce script impose un temps d'arrêt **quand on y a
-passé trop de temps** (15 minutes cumulées, défiler les consomme deux fois plus
+passé trop de temps** (12 minutes cumulées, défiler les consomme deux fois plus
 vite, et seule une heure d'affilée loin de X les rend), en même temps sur tous les onglets X : la
 page est **bloquée une heure** et le mot **TROP** envahit l'écran, en blanc sur
 noir, sur toute la largeur. Il bat comme un cœur qui s'emballe pendant douze
 minutes, puis chaque lettre se fissure lentement, douze minutes chacune, avant
-de tomber en éclats, et la page réapparaît avec ses 15 minutes rendues.
+de tomber en éclats, et la page réapparaît avec ses 12 minutes rendues.
 
 ## Installation
 
@@ -72,14 +72,14 @@ très bien comme ça.
 ## Quand ça se déclenche
 
 Pas à l'arrivée : seulement quand on a **trop** utilisé X récemment. C'est une
-**jauge de 15 minutes** qui se remplit quand on regarde, et **ne se vide pas
+**jauge de 12 minutes** qui se remplit quand on regarde, et **ne se vide pas
 peu à peu quand on part** :
 
 - chaque seconde passée **à regarder** X (onglet au premier plan **et** fenêtre
   active) la remplit d'**une** seconde ;
 - chaque seconde passée **à défiler** la remplit de **deux** : défiler fait monter
   la jauge deux fois plus vite. En défilant sans arrêt, elle se remplit en
-  ~7 min 30 ;
+  6 min ;
 - **quitter X** arrête de la remplir, mais ne rend rien seconde par seconde : il
   lance un **décompte d'une heure** (voir plus bas). « Quitter X », c'est changer d'onglet, réduire la fenêtre,
   **changer de bureau (Space)** ou passer sur une autre appli : tout ce qui fait
@@ -96,7 +96,7 @@ Reconnaissance (relevée sur x.com le 2026-11-14) : l'adresse
 `/<compte>/status/<id>`, des liens vers `/<compte>/article/<même id>`. Un tweet
 qui cite un article, ou un article aperçu dans le fil, ne fige rien.
 
-Les 15 minutes reviennent d'un coup, et seulement après **une heure**
+Les 12 minutes reviennent d'un coup, et seulement après **une heure**
 (`ATTENTE_MIN`) d'attente, de l'une de ces deux façons :
 
 - **en partant de X** : dès qu'aucun onglet X n'est plus au premier plan, le
@@ -140,7 +140,7 @@ site (`localStorage`, clés `trop:base`, `trop:surcout`, `trop:maj`, `trop:vu`,
 ```
 TROP dans 4:25                  [×2]
 ▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬────────────
-10:35 / 15:00       −5:20 en défilant
+7:35 / 12:00        −5:20 en défilant
 ```
 
 Mis à jour chaque seconde, dans tous les onglets :

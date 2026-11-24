@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.10.0
+// @version     4.11.0
 //
 // @match       https://x.com/*
 // @match       https://twitter.com/*
@@ -11,7 +11,7 @@
 // @grant       none
 //
 // @author      Mik
-// @description Après 15 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 60 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant une heure : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
+// @description Après 12 minutes passées sur x.com (défiler les consomme 2 fois plus vite ; 60 minutes d'affilée loin de X les rendent ; lire un article X ne compte pas), bloque tous les onglets à la fois pendant une heure : « TROP » plein écran en blanc sur noir, qui bat comme un cœur, puis se brise lettre par lettre. Compte à rebours en haut à droite. Générique : il suffit d'ajouter des @match.
 // ==/UserScript==
 
 (function() {
@@ -27,7 +27,7 @@
     // c'est l'attente. À la fin, la jauge revient à zéro. Quitter X ne la vide pas
     // peu à peu, mais rester ATTENTE_MIN minutes D'AFFILÉE loin de X la remet à
     // zéro aussi ; revenir avant annule ce décompte.
-    const BUDGET_MIN = 15;
+    const BUDGET_MIN = 12;
     const COUT_DEFILEMENT = 2;
     const ATTENTE_MIN = 60;
     // Chronologie, en secondes depuis le début de la séquence. 60 minutes en tout,
