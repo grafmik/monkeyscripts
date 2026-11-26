@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        TROP : pause forcée à la Gaspar Noé
 // @namespace   Violentmonkey Scripts
-// @version     4.12.0
+// @version     4.13.0
 // @downloadURL https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js
 // @updateURL   https://github.com/grafmik/monkeyscripts/raw/refs/heads/main/trop/trop.user.js
 //
@@ -637,13 +637,30 @@
         // --- 6. Boucle --------------------------------------------------------------
         // Horloge murale commune à tous les onglets : passer de l'un à l'autre en
         // cours de séquence montre le même instant.
-        let t = 0, termine = false;
+        // On ne redessine qu'à chaque nouvelle image de la « pellicule »
+        // (IMAGES_PAR_S, 24/s) et pas à chaque rafraîchissement de l'écran
+        // (60/s ou plus) : 2,5 fois moins de calcul pendant une heure, sans
+        // différence à l'œil, puisque le tremblement saute déjà à 24 images/s.
+        // dessiner() ne dépend que de t, donc sauter des rafraîchissements ne
+        // change rien à ce qui est montré.
+        let t = 0, termine = false, derniereImage = -1;
+        // N'écrit un style que s'il change : la plupart des éclats et des
+        // fissures restent immobiles d'une image à l'autre, et chaque écriture,
+        // même identique, oblige le navigateur à recalculer les styles.
+        const poser = (el, prop, v) => {
+            const cle = '_trop_' + prop;
+            if (el[cle] !== v) { el[cle] = v; el.style[prop] = v; }
+        };
 
         function image() {
             if (termine) return;
             try {
                 t = (Date.now() - debut) / 1000;
-                dessiner();
+                const numero = Math.floor(t * IMAGES_PAR_S);
+                if (numero !== derniereImage || t >= T_FIN) {
+                    derniereImage = numero;
+                    dessiner();
+                }
                 if (t >= T_FIN) return terminer();
                 requestAnimationFrame(image);
             } catch (e) {
@@ -658,12 +675,11 @@
             const nouvelleImage = numero !== imageTremble;
             imageTremble = numero;
 
-            // Intensité du tremblement : monte avec le temps, bondit à chaque battement,
-            // puis un reste de nervosité pendant les fissures
-            // (pendant le bris, la nervosité monte à mesure que la lettre se fissure)
+            // Intensité du tremblement : monte avec le temps, bondit à chaque battement.
+            // Dès la première fissure, le mot ne tremble plus : seules les fissures
+            // secouent leur lettre, d'un coup sec à chaque fois.
             let force = 0;
             if (t < T_COEUR + 0.3) force = 2 + 9 * borne(t / T_COEUR) + 14 * p + (t < T_ENTREE ? 10 : 0);
-            else if (t < T_FONDU) force = 1.2 + 2.5 * borne(((t - T_FISSURE) % ECART_FISSURE) / T_AVANT_CHUTE);
             if (nouvelleImage) {
                 secousseMot = {x: hasard(-1, 1) * force, y: hasard(-1, 1) * force, r: hasard(-1, 1) * force * 0.05};
                 secousse.forEach(s => { s.x = hasard(-1, 1) * force * 0.35; s.y = hasard(-1, 1) * force * 0.35; });
@@ -672,16 +688,16 @@
             // Le mot entier avance lentement vers le spectateur et enfle à chaque battement
             const approche = 0.94 + 0.08 * borne(t / T_FISSURE);
             const echelle = t < T_FISSURE ? approche * (1 + 0.09 * p) : approche;
-            mot.style.transform = `translate(${secousseMot.x}px, ${secousseMot.y}px) rotate(${secousseMot.r}deg) scale(${echelle})`;
+            poser(mot, 'transform', `translate(${secousseMot.x}px, ${secousseMot.y}px) rotate(${secousseMot.r}deg) scale(${echelle})`);
 
             // Écho fantôme : un contour flou jaillit à chaque « poum »
             const d = dernierPoum(t);
             if (d >= 0 && t < T_FISSURE) {
                 const u = borne((t - d) / 0.55);
-                echo.style.opacity = String(0.45 * (1 - u));
+                poser(echo, 'opacity', String(0.45 * (1 - u)));
                 echo.style.transform = `translate(${-secousseMot.x}px, ${-secousseMot.y}px) scale(${approche * (1 + 0.28 * u)})`;
             } else {
-                echo.style.opacity = '0';
+                poser(echo, 'opacity', '0');
             }
 
             lettres.forEach((l, i) => {
@@ -706,12 +722,12 @@
                         ps.sg.ouvert += 0.5 * (1 - Math.pow(1 - borne(v / ps.duree), 3));
                         if (v < 0.6) choc += ps.choc * Math.exp(-v / 0.09);
                     });
-                    l.segments.forEach(sg => { sg.p.style.strokeDashoffset = String(1 - sg.ouvert); });
+                    l.segments.forEach(sg => { poser(sg.p, 'strokeDashoffset', String(1 - sg.ouvert)); });
                 }
                 const cx = secousse[i].x + choc * hasard(-1, 1);
                 const cy = secousse[i].y + choc * hasard(-1, 1);
-                l.el.style.transform = `translate(${cx}px, ${cy}px) scale(${s})`;
-                l.el.style.opacity = String(borne(u * 3));
+                poser(l.el, 'transform', `translate(${cx}px, ${cy}px) scale(${s})`);
+                poser(l.el, 'opacity', String(borne(u * 3)));
                 if (!l.eclats) return;
 
                 // La lettre se disjoint à mesure que les fissures s'ouvrent
@@ -721,19 +737,25 @@
                     if (tc <= 0) {
                         // Avant la chute : les éclats s'écartent à peine, la lettre se disjoint
                         const ecart = e.ecart * disjoint;
-                        e.el.style.transform = `translate(${e.ux * ecart}px, ${e.uy * ecart}px)`;
+                        poser(e.el, 'transform', `translate(${e.ux * ecart}px, ${e.uy * ecart}px)`);
+                        return;
+                    }
+                    if (tc > DUREE_CHUTE + 0.5) {
+                        // Tombé hors de l'écran depuis longtemps : on le cache une
+                        // fois pour toutes au lieu de le recalculer jusqu'à la fin.
+                        poser(e.el, 'visibility', 'hidden');
                         return;
                     }
                     const g = 1600;
-                    const x = e.ux * e.ecart + e.vx * tc;
+                    const x =e.ux * e.ecart + e.vx * tc;
                     const y = e.uy * e.ecart + e.vy * tc + 0.5 * g * tc * tc;
-                    e.el.style.transform =
-                        `translate3d(${x}px, ${y}px, ${e.vz * 120 * tc}px) rotateX(${e.rx * tc}deg) rotateZ(${e.rz * tc}deg)`;
+                    poser(e.el, 'transform',
+                        `translate3d(${x}px, ${y}px, ${e.vz * 120 * tc}px) rotateX(${e.rx * tc}deg) rotateZ(${e.rz * tc}deg)`);
                 });
                 // Les traits de fissure s'effacent quand les morceaux se détachent
                 const tChute = tFissure + T_AVANT_CHUTE;
-                l.el.style.color = t > tChute ? 'transparent' : '';
-                if (l.svg && t > tChute) l.svg.style.opacity = String(1 - borne((t - tChute) / 0.15));
+                poser(l.el, 'color', t > tChute ? 'transparent' : '');
+                if (l.svg && t > tChute) poser(l.svg, 'opacity', String(1 - borne((t - tChute) / 0.15)));
             });
 
             // Fondu final : le noir se retire et la page réapparaît

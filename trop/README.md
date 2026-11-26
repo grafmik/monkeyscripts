@@ -25,12 +25,14 @@ battements, puis **12 min par lettre** (`ECART_FISSURE = 720 s`), puis le fondu.
 | 0 → 0,9 s | Les lettres surgissent du fond l'une après l'autre, avec un léger rebond |
 | 0,9 → ~719 s | Le mot bat comme un cœur (« poum-pa »), de 58 à 104 battements/min, sur ~12 min. Il tremble à 24 images/s comme une caméra à l'épaule, avance lentement vers le spectateur, et un contour fantôme flou jaillit à chaque battement |
 | 719 s | Le T reçoit le choc : les premières fissures noires partent du point d'impact |
-| 719 → 1434 s | Le T se fissure lentement, en ~80 étapes : chaque fissure (tronçon de rayon, puis arc d'anneau) s'ouvre à moitié puis se prolonge plus tard ; rares au début, de plus en plus serrées ; chacune secoue la lettre, qui se disjoint peu à peu. Le reste du mot frémit, de plus en plus nerveux |
+| 719 → 1434 s | Le T se fissure lentement, en ~80 étapes : chaque fissure (tronçon de rayon, puis arc d'anneau) s'ouvre à moitié puis se prolonge plus tard ; rares au début, de plus en plus serrées ; chacune secoue la lettre, qui se disjoint peu à peu. Dès la première fissure, le mot ne tremble plus : seules les fissures secouent leur lettre, d'un coup sec |
 | 1434 → 1436 s | Les éclats du T tombent en tournoyant en 3D |
-| 1436 → 1439 s | Pause : « ROP » reste seul, il frémit |
+| 1436 → 1439 s | Pause : « ROP » reste seul, immobile |
 | 1439 s, 2159 s, 2879 s | Même chose pour R, puis O, puis P : 12 min chacune |
 | 3596 → 3600 s | Le noir s'efface, la page apparaît en fondu |
 | 3600 s | Clavier, souris et défilement sont rendus, la jauge revient à zéro |
+
+**Léger** : l'animation ne se redessine qu'à 24 images/s (le rythme du tremblement), et seuls les styles qui changent sont réécrits ; les éclats tombés sont cachés. Mesuré dans Chrome (v4.13, temps du fil principal) : ~3 % du début à la fin de la séquence, contre 8 à 20 % avant (la charge montait de lettre en lettre).
 
 **Mêmes fissures partout** : le motif de chaque lettre (point d'impact,
 fissures, ordre d'apparition, trajectoires des éclats) est tiré d'un hasard
